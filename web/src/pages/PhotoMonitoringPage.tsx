@@ -18,6 +18,7 @@ import { SitePhoto } from '@project/shared';
 import { Button } from '../components/Button';
 import { EmptyState } from '../components/common/EmptyState';
 import { constructionService } from '../services/construction.service';
+import { resolveImageUrl } from '../services/api';
 
 export const PhotoMonitoringPage: React.FC = () => {
   const { photos, sitesList, uploadPhoto, globalSearch, refreshData } = useDashboardContext();
@@ -79,9 +80,9 @@ export const PhotoMonitoringPage: React.FC = () => {
     setIsUploadingFile(true);
     try {
       const uploadRes = await constructionService.uploadPhotoFile(file);
-      // Construct full URL if relative
-      const backendBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:8000';
-      const fullUrl = uploadRes.url.startsWith('http') ? uploadRes.url : `${backendBase}${uploadRes.url}`;
+      const fullUrl = uploadRes.url.startsWith('http')
+        ? uploadRes.url
+        : uploadRes.url.startsWith('/') ? uploadRes.url : `/${uploadRes.url}`;
       setNewPhoto((prev) => ({ ...prev, imageUrl: fullUrl }));
     } catch (err: any) {
       // Fallback: convert to base64 data url so image always displays
@@ -239,7 +240,7 @@ export const PhotoMonitoringPage: React.FC = () => {
               {/* Image Container */}
               <div className="relative aspect-16/10 bg-slate-100 overflow-hidden">
                 <img
-                  src={photo.imageUrl}
+                  src={resolveImageUrl(photo.imageUrl)}
                   alt={photo.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
@@ -300,7 +301,7 @@ export const PhotoMonitoringPage: React.FC = () => {
           >
             <div className="relative aspect-16/10 bg-black">
               <img
-                src={selectedPhoto.imageUrl}
+                src={resolveImageUrl(selectedPhoto.imageUrl)}
                 alt={selectedPhoto.title}
                 className="w-full h-full object-cover"
               />

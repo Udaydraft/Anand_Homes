@@ -57,9 +57,7 @@ export const authService = {
   },
 
   async checkHealth(): Promise<HealthResponse> {
-    const res = await apiClient.get<HealthResponse>('/health', {
-      baseURL: import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:8000',
-    });
+    const res = await apiClient.get<HealthResponse>('/health');
     return res.data;
   },
 

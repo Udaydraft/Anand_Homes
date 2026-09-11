@@ -53,8 +53,9 @@ export const StockInPage: React.FC = () => {
     try {
       setIsUploading(true);
       const res = await constructionService.uploadPhotoFile(file);
-      const backendBase = import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:8000';
-      const fullUrl = res.url.startsWith('http') ? res.url : `${backendBase}${res.url}`;
+      const fullUrl = res.url.startsWith('http')
+        ? res.url
+        : res.url.startsWith('/') ? res.url : `/${res.url}`;
       setUploadedFile(fullUrl);
     } catch (err) {
       console.warn('Backend file upload fallback:', err);

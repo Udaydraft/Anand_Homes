@@ -24,6 +24,23 @@ export const clearTokens = (): void => {
   localStorage.removeItem('user_info');
 };
 
+/**
+ * Resolves static media URLs (such as /uploads/...) so they work correctly
+ * whether hosted on localhost, Render, or deployed separately on Vercel.
+ */
+export const resolveImageUrl = (url?: string): string => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+    return url;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  if (apiUrl.startsWith('http://') || apiUrl.startsWith('https://')) {
+    const backendBase = apiUrl.replace(/\/api\/?$/, '');
+    return `${backendBase}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+  return url;
+};
+
 // Request Interceptor: Attach Access Token
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {

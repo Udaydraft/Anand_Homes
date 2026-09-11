@@ -187,15 +187,15 @@ export const DatabaseStatusBadge: React.FC = () => {
                 <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
                   <div className="bg-slate-50 border border-slate-100 rounded-lg p-2">
                     <span className="text-slate-400 block text-[10px]">Users</span>
-                    <span className="font-extrabold text-slate-800 text-sm">{status.collections.users ?? 0}</span>
+                    <span className="font-extrabold text-slate-800 text-sm">{status?.collections?.users ?? 0}</span>
                   </div>
                   <div className="bg-slate-50 border border-slate-100 rounded-lg p-2">
                     <span className="text-slate-400 block text-[10px]">Project Sites</span>
-                    <span className="font-extrabold text-slate-800 text-sm">{status.collections.sites ?? 0}</span>
+                    <span className="font-extrabold text-slate-800 text-sm">{status?.collections?.sites ?? 0}</span>
                   </div>
                   <div className="bg-slate-50 border border-slate-100 rounded-lg p-2">
                     <span className="text-slate-400 block text-[10px]">Materials</span>
-                    <span className="font-extrabold text-slate-800 text-sm">{status.collections.inventory ?? 0}</span>
+                    <span className="font-extrabold text-slate-800 text-sm">{status?.collections?.inventory ?? 0}</span>
                   </div>
                 </div>
               </div>

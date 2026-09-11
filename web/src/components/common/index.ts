@@ -5,4 +5,6 @@ export * from './Skeleton';
 export * from './RetryButton';
 export * from './PageContainer';
 export * from './DatabaseStatusBadge';
+export * from './ErrorBoundary';
+
 
