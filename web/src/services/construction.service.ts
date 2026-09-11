@@ -163,6 +163,17 @@ export const constructionService = {
     return res.data.data;
   },
 
+  async uploadPhotoFile(file: File): Promise<{ url: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await apiClient.post<ApiResponse<{ url: string; filename: string }>>(
+      '/photos/upload-file',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return res.data.data;
+  },
+
   // Activities & Summary
   async getActivities(site?: string, limit: number = 20): Promise<ActivityItem[]> {
     const params: Record<string, any> = { limit };

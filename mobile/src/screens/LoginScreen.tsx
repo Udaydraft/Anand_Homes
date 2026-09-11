@@ -21,8 +21,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [selectedRole, setSelectedRole] = useState<MobileRoleMode>('admin');
-  const [email, setEmail] = useState('admin@anandhomes.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,21 +32,10 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleRoleTab = (role: MobileRoleMode) => {
     setSelectedRole(role);
-    if (role === 'admin') {
-      setEmail('admin@anandhomes.com');
-      setPassword('password123');
-    } else {
-      setEmail('supervisor@anandhomes.com');
-      setPassword('password123');
-    }
-  };
-
-  const handleDummyLogin = (role: MobileRoleMode) => {
-    setRoleMode(role);
-    navigation.navigate('Dashboard');
   };
 
   const handleLogin = async () => {
+    setError(null);
     setIsSubmitting(true);
     try {
       const role: MobileRoleMode =
@@ -57,9 +46,12 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
       await login({ email, password });
       navigation.navigate('Dashboard');
-    } catch (err) {
-      // Demo fallback
-      navigation.navigate('Dashboard');
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        'Login failed. Please verify your credentials.';
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setIsSubmitting(false);
     }
@@ -173,51 +165,6 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
                   : `Login as ${selectedRole === 'admin' ? 'Administrator' : 'Site Supervisor'}`}
               </Text>
             </TouchableOpacity>
-
-            {/* Quick 1-Tap Dummy Login Section */}
-            <View style={styles.dummySection}>
-              <Text style={styles.dummyHeader}>⚡ One-Tap Demo Login</Text>
-              <View style={styles.dummyButtonsRow}>
-                <TouchableOpacity
-                  style={styles.dummyBtnAdmin}
-                  onPress={() => handleDummyLogin('admin')}
-                >
-                  <Ionicons name="shield-checkmark" size={14} color="#0D5C3A" />
-                  <Text style={styles.dummyBtnTextAdmin}>Demo Admin</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.dummyBtnSupervisor}
-                  onPress={() => handleDummyLogin('supervisor')}
-                >
-                  <Ionicons name="construct" size={14} color="#92400E" />
-                  <Text style={styles.dummyBtnTextSupervisor}>Demo Supervisor</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Social Logins */}
-            <Text style={styles.socialOr}>or continue with</Text>
-            <View style={styles.socialRow}>
-              <TouchableOpacity
-                style={styles.socialIconBtn}
-                onPress={() => handleDummyLogin(selectedRole)}
-              >
-                <Ionicons name="logo-google" size={18} color="#EA4335" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.socialIconBtn}
-                onPress={() => handleDummyLogin(selectedRole)}
-              >
-                <Ionicons name="logo-apple" size={18} color="#0F172A" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.socialIconBtn}
-                onPress={() => handleDummyLogin(selectedRole)}
-              >
-                <Ionicons name="logo-windows" size={18} color="#00A4EF" />
-              </TouchableOpacity>
-            </View>
 
             {/* Sign Up Link */}
             <View style={styles.signUpRow}>

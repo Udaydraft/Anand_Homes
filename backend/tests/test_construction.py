@@ -3,26 +3,33 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_seed_and_list_sites(client: AsyncClient):
-    # 1. Trigger Seed
-    seed_res = await client.post("/api/seed")
-    assert seed_res.status_code == 200
+async def test_create_and_list_sites(client: AsyncClient):
+    new_site = {
+        "code": "RBL-S-101",
+        "name": "Site Omega",
+        "location": "Chennai, TN",
+        "supervisor": "Rajesh Kumar",
+        "status": "Active",
+        "totalMaterials": 5,
+        "stockValue": 100000,
+        "contact": "98765 43210",
+        "projectType": "Commercial",
+    }
+    create_res = await client.post("/api/sites", json=new_site)
+    assert create_res.status_code == 201
 
-    # 2. List Sites
     sites_res = await client.get("/api/sites")
     assert sites_res.status_code == 200
     body = sites_res.json()
     assert body["success"] is True
-    assert len(body["data"]) >= 3
     site_names = [s["name"] for s in body["data"]]
-    assert "Site Alpha" in site_names
-    assert "Site Beta" in site_names
+    assert "Site Omega" in site_names
 
 
 @pytest.mark.asyncio
 async def test_create_and_delete_site(client: AsyncClient):
     new_site = {
-        "code": "RBL-S-004",
+        "code": "RBL-S-102",
         "name": "Site Delta",
         "location": "Trichy, TN",
         "supervisor": "Murugan K",
@@ -41,7 +48,7 @@ async def test_create_and_delete_site(client: AsyncClient):
     # Get Single Site
     get_res = await client.get(f"/api/sites/{site_id}")
     assert get_res.status_code == 200
-    assert get_res.json()["data"]["code"] == "RBL-S-004"
+    assert get_res.json()["data"]["code"] == "RBL-S-102"
 
     # Update Site
     update_res = await client.put(f"/api/sites/{site_id}", json={"location": "Tiruchirappalli, TN"})
@@ -59,14 +66,6 @@ async def test_create_and_delete_site(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_stock_in_and_out(client: AsyncClient):
-    # Seed first
-    await client.post("/api/seed")
-
-    # Check initial stock
-    inv_res = await client.get("/api/inventory?site=Site%20Alpha")
-    initial_cement = next(item for item in inv_res.json()["data"] if "UltraTech" in item["name"])
-    initial_stock = initial_cement["totalStock"]
-
     # Stock In
     stock_in_payload = {
         "site": "Site Alpha",
@@ -83,8 +82,8 @@ async def test_stock_in_and_out(client: AsyncClient):
 
     # Check updated stock
     inv_after_in = await client.get("/api/inventory?site=Site%20Alpha")
-    updated_cement = next(item for item in inv_after_in.json()["data"] if "UltraTech" in item["name"])
-    assert updated_cement["totalStock"] == initial_stock + 50
+    cement = next(item for item in inv_after_in.json()["data"] if "UltraTech" in item["name"])
+    assert cement["totalStock"] == 50
 
     # Stock Out
     stock_out_payload = {
@@ -102,7 +101,7 @@ async def test_stock_in_and_out(client: AsyncClient):
     # Check final stock
     inv_after_out = await client.get("/api/inventory?site=Site%20Alpha")
     final_cement = next(item for item in inv_after_out.json()["data"] if "UltraTech" in item["name"])
-    assert final_cement["totalStock"] == initial_stock + 50 - 20
+    assert final_cement["totalStock"] == 30
 
 
 @pytest.mark.asyncio
@@ -162,10 +161,31 @@ async def test_deliveries_crud(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_dashboard_summary(client: AsyncClient):
-    await client.post("/api/seed")
+    # Add a site
+    await client.post("/api/sites", json={
+        "code": "RBL-S-999",
+        "name": "Site Summary Test",
+        "location": "Chennai",
+        "supervisor": "Test",
+        "status": "Active",
+        "totalMaterials": 1,
+        "stockValue": 50000,
+    })
     res = await client.get("/api/dashboard/summary")
     assert res.status_code == 200
     summary = res.json()["data"]
-    assert summary["totalSites"] >= 3
-    assert summary["activeSites"] >= 3
-    assert summary["totalMaterials"] >= 7
+    assert summary["totalSites"] >= 1
+    assert summary["activeSites"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_upload_file_endpoint(client: AsyncClient):
+    file_content = b"fake-image-bytes-content"
+    files = {"file": ("test_site_progress.jpg", file_content, "image/jpeg")}
+    res = await client.post("/api/photos/upload-file", files=files)
+    assert res.status_code == 201
+    data = res.json()["data"]
+    assert "url" in data
+    assert data["url"].startswith("/uploads/")
+    assert data["filename"].endswith(".jpg")
+

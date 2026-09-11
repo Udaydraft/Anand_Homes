@@ -105,3 +105,46 @@ async def test_auth_me_and_refresh(client: AsyncClient):
     )
     assert logout_res.status_code == 200
     assert logout_res.json()["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_and_create_users(client: AsyncClient):
+    # Create a supervisor via POST /api/users
+    create_res = await client.post(
+        "/api/users",
+        json={
+            "name": "Supervisor Test",
+            "email": "supervisor.test@anandhomes.com",
+            "password": "Password@123",
+            "role": "supervisor",
+        },
+    )
+    assert create_res.status_code == 201
+    user_data = create_res.json()["data"]
+    assert user_data["email"] == "supervisor.test@anandhomes.com"
+    assert user_data["role"] == "supervisor"
+
+    # List all users
+    list_res = await client.get("/api/users")
+    assert list_res.status_code == 200
+    users = list_res.json()["data"]
+    assert any(u["email"] == "supervisor.test@anandhomes.com" for u in users)
+
+    # Filter by role
+    sup_res = await client.get("/api/users?role=supervisor")
+    assert sup_res.status_code == 200
+    sup_users = sup_res.json()["data"]
+    assert all(u["role"] == "supervisor" for u in sup_users)
+
+
+@pytest.mark.asyncio
+async def test_database_status(client: AsyncClient):
+    res = await client.get("/api/database/status")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["success"] is True
+    data = body["data"]
+    assert "mode" in data
+    assert "is_connected" in data
+    assert "collections" in data
+

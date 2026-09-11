@@ -14,12 +14,15 @@ import {
   FileText,
 } from 'lucide-react';
 import { MaterialRequest } from '@project/shared';
+import { Button } from '../components/Button';
+import { EmptyState } from '../components/common/EmptyState';
+import { ConfirmationDialog } from '../components/feedback/ConfirmationDialog';
 
 export const MaterialRequestsPage: React.FC = () => {
   const {
     roleMode,
     materialRequests,
-    sitesList,
+    sites,
     createMaterialRequest,
     approveRequest,
     rejectRequest,
@@ -31,17 +34,25 @@ export const MaterialRequestsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<MaterialRequest | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [rejectRequestId, setRejectRequestId] = useState<string | null>(null);
+  const [cancelRequestId, setCancelRequestId] = useState<string | null>(null);
 
   // New Request Form State
   const [newReq, setNewReq] = useState({
-    site: 'Site Alpha',
+    site: sites[0]?.name || '',
     material: 'Cement',
-    quantity: '100',
+    quantity: '',
     unit: 'Bags',
-    purpose: 'Foundation Work',
-    requiredDate: '02 Jun 2025',
+    purpose: '',
+    requiredDate: new Date().toISOString().split('T')[0],
     notes: '',
   });
+
+  React.useEffect(() => {
+    if (!newReq.site && sites.length > 0) {
+      setNewReq((prev) => ({ ...prev, site: sites[0].name }));
+    }
+  }, [sites, newReq.site]);
 
   const materials = ['Cement', 'Steel 12mm', 'Sand', 'Bricks', 'Paint', 'Gravel 20mm', 'Plywood', 'Rods 8mm'];
   const units = ['Bags', 'Ton', 'Loads', 'Nos', 'Boxes', 'Sheets'];
@@ -59,14 +70,24 @@ export const MaterialRequestsPage: React.FC = () => {
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newReq.site || !newReq.material || !newReq.quantity) return;
     createMaterialRequest({
       site: newReq.site,
       material: newReq.material,
       quantity: parseFloat(newReq.quantity) || 1,
       unit: newReq.unit,
-      purpose: newReq.purpose,
+      purpose: newReq.purpose.trim() || 'General Construction',
       requiredDate: newReq.requiredDate,
       notes: newReq.notes,
+    });
+    setNewReq({
+      site: sites[0]?.name || '',
+      material: 'Cement',
+      quantity: '',
+      unit: 'Bags',
+      purpose: '',
+      requiredDate: new Date().toISOString().split('T')[0],
+      notes: '',
     });
     setShowNewModal(false);
     setActiveTab('Pending');
@@ -82,13 +103,13 @@ export const MaterialRequestsPage: React.FC = () => {
             Submit, track, and approve site material indents and allocations
           </p>
         </div>
-        <button
+        <Button
+          variant="brand"
+          icon={<Plus className="w-4 h-4" />}
           onClick={() => setShowNewModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white text-xs font-bold rounded-lg shadow-sm transition-all"
         >
-          <Plus className="w-4 h-4" />
-          <span>New Request</span>
-        </button>
+          New Request
+        </Button>
       </div>
 
       {/* Main Table Card */}
@@ -146,42 +167,62 @@ export const MaterialRequestsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredRequests.map((req) => (
-                <tr key={req.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                    {req.requestId}
-                  </td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-800">{req.site}</td>
-                  <td className="py-3.5 px-4 font-medium text-slate-700">{req.material}</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">
-                    {req.quantity} {req.unit}
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-600">{req.requestedBy}</td>
-                  <td className="py-3.5 px-4 text-slate-500">{req.requestedOn}</td>
-                  <td className="py-3.5 px-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        req.status === 'Approved'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : req.status === 'Pending'
-                          ? 'bg-amber-50 text-amber-700'
-                          : 'bg-rose-50 text-rose-700'
-                      }`}
-                    >
-                      {req.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <button
-                      onClick={() => setSelectedRequest(req)}
-                      className="p-1.5 rounded-md text-slate-400 hover:text-[#0D5C3A] hover:bg-emerald-50 transition-colors"
-                      title="View Request Details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
+              {filteredRequests.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 px-4">
+                    <EmptyState
+                      variant="dashed"
+                      title="No Material Requests Found"
+                      description={
+                        query
+                          ? `No requests match "${query}". Try adjusting your search or tab filter.`
+                          : activeTab !== 'All'
+                          ? `There are currently no requests with status "${activeTab}".`
+                          : 'No material requests have been created yet. Submit your first indent to request resources.'
+                      }
+                      actionLabel="New Request"
+                      onAction={() => setShowNewModal(true)}
+                    />
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredRequests.map((req) => (
+                  <tr key={req.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                      {req.requestId}
+                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-slate-800">{req.site}</td>
+                    <td className="py-3.5 px-4 font-medium text-slate-700">{req.material}</td>
+                    <td className="py-3.5 px-4 font-bold text-slate-900">
+                      {req.quantity} {req.unit}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-600">{req.requestedBy}</td>
+                    <td className="py-3.5 px-4 text-slate-500">{req.requestedOn}</td>
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          req.status === 'Approved'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : req.status === 'Pending'
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-rose-50 text-rose-700'
+                        }`}
+                      >
+                        {req.status}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => setSelectedRequest(req)}
+                        className="p-1.5 rounded-md text-slate-400 hover:text-[#0D5C3A] hover:bg-emerald-50 transition-colors"
+                        title="View Request Details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -289,35 +330,37 @@ export const MaterialRequestsPage: React.FC = () => {
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
               {roleMode === 'admin' ? (
                 <>
-                  <button
+                  <Button
+                    variant="danger"
+                    size="sm"
                     onClick={() => {
-                      rejectRequest(selectedRequest.id);
-                      setSelectedRequest(null);
+                      setRejectRequestId(selectedRequest.id);
                     }}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm"
                   >
                     Reject
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="brand"
+                    size="sm"
                     onClick={() => {
                       approveRequest(selectedRequest.id);
                       setSelectedRequest(null);
                     }}
-                    className="px-5 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white text-xs font-bold rounded-lg shadow-sm"
                   >
                     Approve
-                  </button>
+                  </Button>
                 </>
               ) : (
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => {
-                    cancelRequest(selectedRequest.id);
-                    setSelectedRequest(null);
+                    setCancelRequestId(selectedRequest.id);
                   }}
-                  className="px-4 py-2 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-lg"
+                  className="text-rose-600 border-rose-200 hover:bg-rose-50"
                 >
                   Cancel Request
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -346,9 +389,9 @@ export const MaterialRequestsPage: React.FC = () => {
                   onChange={(e) => setNewReq({ ...newReq, site: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
                 >
-                  {sitesList.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name}
                     </option>
                   ))}
                 </select>
@@ -431,24 +474,60 @@ export const MaterialRequestsPage: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-semibold"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white font-bold rounded-lg shadow-sm"
+                  variant="brand"
+                  size="sm"
                 >
                   Submit Request
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Rejection Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={Boolean(rejectRequestId)}
+        title="Reject Material Request"
+        description="Are you sure you want to reject this indent request? This will mark the request as rejected and alert the site supervisor."
+        confirmLabel="Reject Indent"
+        variant="danger"
+        onConfirm={() => {
+          if (rejectRequestId) {
+            rejectRequest(rejectRequestId);
+            setRejectRequestId(null);
+            setSelectedRequest(null);
+          }
+        }}
+        onCancel={() => setRejectRequestId(null)}
+      />
+
+      {/* Cancellation Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={Boolean(cancelRequestId)}
+        title="Cancel Material Request"
+        description="Are you sure you want to cancel your indent request? Once cancelled, site managers will not fulfill this delivery."
+        confirmLabel="Cancel Indent"
+        variant="warning"
+        onConfirm={() => {
+          if (cancelRequestId) {
+            cancelRequest(cancelRequestId);
+            setCancelRequestId(null);
+            setSelectedRequest(null);
+          }
+        }}
+        onCancel={() => setCancelRequestId(null)}
+      />
     </div>
   );
 };

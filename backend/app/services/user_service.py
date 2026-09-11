@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.models.user import UserModel
 from app.schemas.user import UserProfileUpdateRequest, UserResponse
@@ -11,6 +11,17 @@ class UserService:
     def __init__(self, db: AsyncIOMotorDatabase) -> None:
         self.db = db
         self.collection = db["users"]
+
+    async def list_users(self, role: Optional[str] = None) -> List[UserResponse]:
+        """Fetch all registered users, optionally filtered by role."""
+        query: Dict[str, Any] = {}
+        if role:
+            query["role"] = role.lower().strip()
+
+        cursor = self.collection.find(query)
+        docs = await cursor.to_list(1000)
+        users = [UserModel.from_mongo(d) for d in docs]
+        return [self.to_response(u) for u in users]
 
     async def get_by_id(self, user_id: str) -> Optional[UserModel]:
         """Fetch a single user document by ID."""
@@ -45,16 +56,26 @@ class UserService:
         )
         if not result:
             return None
+
+        # Ensure persistence
+        try:
+            from app.database.mongodb import db_manager
+            db_manager.mark_dirty()
+            await db_manager.save_to_disk()
+        except Exception:
+            pass
+
         return UserModel.from_mongo(result)
 
     @staticmethod
     def to_response(user: UserModel) -> UserResponse:
         """Convert UserModel to public UserResponse schema."""
+        normalized_role = "admin" if (user.role == "admin" or "admin@" in user.email) else "supervisor"
         return UserResponse(
             id=user.id,
             name=user.name,
             email=user.email,
-            role=user.role,
+            role=normalized_role,
             is_active=user.is_active,
             created_at=user.created_at,
             updated_at=user.updated_at,

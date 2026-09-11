@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 from app.api.auth import router as auth_router
 from app.api.construction import router as construction_router
+from app.api.database_status import router as database_status_router
+from app.api.properties import router as properties_router
 from app.api.users import router as users_router
 from app.core.config import get_settings
 from app.database.mongodb import db_manager
@@ -28,6 +30,16 @@ logger = logging.getLogger("app.main")
 settings = get_settings()
 
 
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+# ---------------------------------------------------------------------------
+# Uploads Directory Setup
+# ---------------------------------------------------------------------------
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
 # ---------------------------------------------------------------------------
 # Application Lifespan (Startup & Shutdown)
 # ---------------------------------------------------------------------------
@@ -36,12 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application startup and clean database connection shutdown."""
     logger.info("Starting up %s (version: %s)...", settings.PROJECT_NAME, settings.VERSION)
     await db_manager.connect()
-    if db_manager.is_connected and db_manager.db is not None:
-        try:
-            construction_svc = ConstructionService(db_manager.db)
-            await construction_svc.seed_database_if_empty()
-        except Exception as exc:
-            logger.warning("Error running auto-seed on startup: %s", exc)
+    # Real database - no dummy data auto-seeding
     yield
     logger.info("Shutting down %s...", settings.PROJECT_NAME)
     await db_manager.close()
@@ -59,6 +66,9 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
+
+# Mount Static Files for Uploads
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # ---------------------------------------------------------------------------
 # CORS Configuration
@@ -196,4 +206,6 @@ async def api_health() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(properties_router, prefix="/api")
 app.include_router(construction_router, prefix="/api")
+app.include_router(database_status_router, prefix="/api")

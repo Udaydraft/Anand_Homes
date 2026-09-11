@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDashboardContext } from '../context/DashboardContext';
+import { Button } from '../components/Button';
+import { EmptyState, TableSkeleton } from '../components/common';
+import { userService } from '../services/user.service';
 import {
   Building2,
   Plus,
@@ -17,9 +20,21 @@ import {
 } from 'lucide-react';
 
 export const SitesPage: React.FC = () => {
-  const { sites, addSite, globalSearch } = useDashboardContext();
+  const { sites, addSite, globalSearch, isLoadingData } = useDashboardContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [supervisors, setSupervisors] = useState<Array<{ id: string; name: string; email: string }>>([]);
+
+  useEffect(() => {
+    userService
+      .listUsers('supervisor')
+      .then((users) => {
+        if (Array.isArray(users)) {
+          setSupervisors(users.map((u) => ({ id: u.id, name: u.name, email: u.email })));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Form State
   const [newSite, setNewSite] = useState({
@@ -64,142 +79,162 @@ export const SitesPage: React.FC = () => {
           <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Sites / Projects</h2>
           <p className="text-xs text-slate-500 mt-0.5">Manage all active residential and commercial site locations</p>
         </div>
-        <button
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+          leftIcon={<Plus className="w-4 h-4" />}
         >
-          <Plus className="w-4 h-4" />
-          <span>Add Site</span>
-        </button>
+          Add Site
+        </Button>
       </div>
 
       {/* Main Table Card */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        {/* Table Search & Controls Bar */}
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4">
-          <div className="relative w-full max-w-xs">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search sites..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#0D5C3A] text-slate-700"
-            />
+      {isLoadingData ? (
+        <TableSkeleton rows={4} columns={6} />
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+          {/* Table Search & Controls Bar */}
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4">
+            <div className="relative w-full max-w-xs">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search sites..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#0D5C3A] text-slate-700"
+              />
+            </div>
+            <span className="text-xs font-semibold text-slate-500">
+              Total {filteredSites.length} Sites
+            </span>
           </div>
-          <span className="text-xs font-semibold text-slate-500">
-            Total {filteredSites.length} Sites
-          </span>
-        </div>
 
-        {/* Responsive Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="py-3 px-4">Site Code</th>
-                <th className="py-3 px-4">Site Name</th>
-                <th className="py-3 px-4">Location</th>
-                <th className="py-3 px-4">Supervisor</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Total Materials</th>
-                <th className="py-3 px-4">Stock Value</th>
-                <th className="py-3 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredSites.map((site) => (
-                <tr key={site.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="py-3.5 px-4 font-mono font-medium text-slate-600">
-                    {site.code}
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
-                        <img
-                          src={site.imageUrl || 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=100&auto=format&fit=crop&q=80'}
-                          alt={site.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div>
-                        <span className="font-bold text-slate-900 block">{site.name}</span>
-                        <span className="text-[11px] text-slate-400 font-medium">
-                          {site.projectType || 'Residential Project'}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-600 font-medium">
-                    <div className="flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{site.location}</span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-700 font-medium">
-                    <div className="flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{site.supervisor}</span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        site.status === 'Active'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {site.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-700">
-                    {site.totalMaterials}
-                  </td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">
-                    {site.stockValueFormatted}
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                        title="View Site"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                        title="More Options"
-                      >
-                        <MoreVertical className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
+          {/* Responsive Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-3 px-4">Site Code</th>
+                  <th className="py-3 px-4">Site Name</th>
+                  <th className="py-3 px-4">Location</th>
+                  <th className="py-3 px-4">Supervisor</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Total Materials</th>
+                  <th className="py-3 px-4">Stock Value</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredSites.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8">
+                      <EmptyState
+                        icon={<Building2 className="w-7 h-7 text-slate-400" />}
+                        title={query ? 'No sites match your search' : 'No sites added yet'}
+                        description={
+                          query
+                            ? `No projects found matching "${query}". Try clearing the search filter.`
+                            : 'Start tracking construction inventory, progress photos, and material requests by creating your first site.'
+                        }
+                        actionLabel={query ? 'Clear Search' : 'Add New Site'}
+                        onAction={query ? () => setSearchTerm('') : () => setShowAddModal(true)}
+                        variant="default"
+                      />
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSites.map((site) => (
+                    <tr key={site.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="py-3.5 px-4 font-mono font-medium text-slate-600">
+                        {site.code}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
+                            <img
+                              src={
+                                site.imageUrl ||
+                                'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=100&auto=format&fit=crop&q=80'
+                              }
+                              alt={site.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900 block">{site.name}</span>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {site.projectType || 'Residential Project'}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{site.location}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-700 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{site.supervisor}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            site.status === 'Active'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {site.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-700">
+                        {site.totalMaterials}
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        {site.stockValueFormatted}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                            title="View Site"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                            title="More Options"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Table Pagination Matching Mockup */}
-        <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <span>Showing 1 to {filteredSites.length} of 12 sites</span>
-          <div className="flex items-center gap-1">
-            <button className="px-2.5 py-1 rounded border border-slate-200 bg-[#0D5C3A] text-white font-bold">
-              1
-            </button>
-            <button className="px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium">
-              2
-            </button>
-            <button className="px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium">
-              3
-            </button>
-            <button className="px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600">
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+          {/* Table Pagination */}
+          <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+            <span>
+              Showing {filteredSites.length > 0 ? 1 : 0} to {filteredSites.length} of {sites.length} sites
+            </span>
+            <div className="flex items-center gap-1">
+              <button className="px-2.5 py-1 rounded border border-slate-200 bg-[#0D5C3A] text-white font-bold">
+                1
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Add Site Modal */}
       {showAddModal && (
@@ -257,11 +292,19 @@ export const SitesPage: React.FC = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Supervisor Name</label>
                   <input
                     type="text"
+                    list="supervisors-list"
                     placeholder="e.g. Rajesh Kumar"
                     value={newSite.supervisor}
                     onChange={(e) => setNewSite({ ...newSite, supervisor: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
                   />
+                  <datalist id="supervisors-list">
+                    {supervisors.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.email})
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Contact Phone</label>

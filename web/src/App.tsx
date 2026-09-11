@@ -1,13 +1,19 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider, useAuth } from './hooks/useAuth';
+import { AuthProvider } from './hooks/useAuth';
 import { DashboardProvider } from './context/DashboardContext';
 import { AuthLayout } from './layouts/AuthLayout';
 import { DashboardLayout } from './layouts/DashboardLayout';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { SupervisorDashboard } from './pages/SupervisorDashboard';
+import { PropertiesPage } from './pages/PropertiesPage';
+import { FavoritesPage } from './pages/FavoritesPage';
+import { EnquiriesPage } from './pages/EnquiriesPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { SitesPage } from './pages/SitesPage';
 import { MySitePage } from './pages/MySitePage';
@@ -20,6 +26,15 @@ import { PhotoMonitoringPage } from './pages/PhotoMonitoringPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SiteMapViewPage } from './pages/SiteMapViewPage';
 import { LowStockAlertsPage } from './pages/LowStockAlertsPage';
+
+import {
+  NotFound,
+  Unauthorized,
+  Forbidden,
+  ServerError,
+  NetworkError,
+  Maintenance,
+} from './components/errors';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,10 +58,21 @@ export const App: React.FC = () => {
                 <Route path="/register" element={<RegisterPage />} />
               </Route>
 
-              {/* Authenticated Dashboard Routes */}
-              <Route element={<DashboardLayout />}>
+              {/* Protected Authenticated Dashboard & Real Estate Routes */}
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout />
+                  </ProtectedRoute>
+                }
+              >
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                <Route path="/supervisor/dashboard" element={<SupervisorDashboard />} />
+                <Route path="/properties" element={<PropertiesPage />} />
+                <Route path="/favorites" element={<FavoritesPage />} />
+                <Route path="/enquiries" element={<EnquiriesPage />} />
                 <Route path="/sites" element={<SitesPage />} />
                 <Route path="/my-site" element={<MySitePage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
@@ -65,8 +91,16 @@ export const App: React.FC = () => {
                 <Route path="/notifications" element={<LowStockAlertsPage />} />
               </Route>
 
-              {/* Catch-all redirect */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              {/* Dedicated Error / System Routes */}
+              <Route path="/401" element={<Unauthorized />} />
+              <Route path="/403" element={<Forbidden />} />
+              <Route path="/500" element={<ServerError />} />
+              <Route path="/maintenance" element={<Maintenance />} />
+              <Route path="/network-error" element={<NetworkError />} />
+              <Route path="/404" element={<NotFound />} />
+
+              {/* Catch-all renders 404 NotFound Page */}
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
         </DashboardProvider>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useDashboardContext } from '../context/DashboardContext';
 
 interface Segment {
   label: string;
@@ -7,14 +8,21 @@ interface Segment {
 }
 
 export const StockDonutChart: React.FC = () => {
+  const { inventory } = useDashboardContext();
+
+  const goodCount = inventory.filter((i) => i.status === 'Good').length;
+  const medCount = inventory.filter((i) => i.status === 'Medium').length;
+  const lowCount = inventory.filter((i) => i.status === 'Low').length;
+  const outCount = inventory.filter((i) => i.status === 'Out of Stock').length;
+
   const segments: Segment[] = [
-    { label: 'Good', count: 46, color: '#0D5C3A' },
-    { label: 'Medium', count: 12, color: '#F59E0B' },
-    { label: 'Low', count: 7, color: '#F97316' },
-    { label: 'Out of Stock', count: 4, color: '#EF4444' },
+    { label: 'Good', count: goodCount, color: '#0D5C3A' },
+    { label: 'Medium', count: medCount, color: '#F59E0B' },
+    { label: 'Low', count: lowCount, color: '#F97316' },
+    { label: 'Out of Stock', count: outCount, color: '#EF4444' },
   ];
 
-  const total = segments.reduce((acc, curr) => acc + curr.count, 0);
+  const total = inventory.length;
 
   // Calculate SVG stroke dashes
   const radius = 52;
@@ -42,7 +50,7 @@ export const StockDonutChart: React.FC = () => {
             />
             {/* Slices */}
             {segments.map((seg) => {
-              const percent = seg.count / total;
+              const percent = total > 0 ? seg.count / total : 0;
               const strokeDasharray = `${percent * circumference} ${circumference}`;
               const strokeDashoffset = -accumulatedPercent * circumference;
               accumulatedPercent += percent;

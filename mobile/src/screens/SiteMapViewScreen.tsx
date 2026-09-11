@@ -9,11 +9,14 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import { useMobileData } from '../context/MobileDataContext';
 import { Ionicons } from '@expo/vector-icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SiteMapView'>;
 
 export const SiteMapViewScreen: React.FC<Props> = ({ navigation }) => {
+  const { sites } = useMobileData();
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
@@ -35,21 +38,36 @@ export const SiteMapViewScreen: React.FC<Props> = ({ navigation }) => {
           style={styles.mapBg}
         >
           {/* Pins Overlay */}
-          <View style={[styles.pin, { top: '25%', left: '30%', backgroundColor: '#EF4444' }]}>
-            <Ionicons name="location" size={16} color="#FFFFFF" />
-          </View>
-          <View style={[styles.pin, { top: '35%', left: '60%', backgroundColor: '#10B981' }]}>
-            <Ionicons name="location" size={16} color="#FFFFFF" />
-          </View>
-          <View style={[styles.pin, { top: '55%', left: '20%', backgroundColor: '#F59E0B' }]}>
-            <Ionicons name="location" size={16} color="#FFFFFF" />
-          </View>
-          <View style={[styles.pin, { top: '65%', left: '75%', backgroundColor: '#3B82F6' }]}>
-            <Ionicons name="location" size={16} color="#FFFFFF" />
-          </View>
-          <View style={[styles.pin, { top: '75%', left: '45%', backgroundColor: '#8B5CF6' }]}>
-            <Ionicons name="radio" size={14} color="#FFFFFF" />
-          </View>
+          {sites.map((s, idx) => {
+            const topPct = `${25 + ((idx * 27) % 50)}%`;
+            const leftPct = `${20 + ((idx * 31) % 55)}%`;
+            const bg = s.status === 'Active' ? '#10B981' : '#F59E0B';
+            return (
+              <View
+                key={s.id}
+                style={[styles.pin, { top: topPct as any, left: leftPct as any, backgroundColor: bg }]}
+              >
+                <Ionicons name="location" size={16} color="#FFFFFF" />
+              </View>
+            );
+          })}
+
+          {sites.length === 0 && (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+              <Text
+                style={{
+                  color: '#FFFFFF',
+                  backgroundColor: 'rgba(15,23,42,0.85)',
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+              >
+                No site locations recorded.
+              </Text>
+            </View>
+          )}
 
           {/* Zoom controls */}
           <View style={styles.zoomBox}>

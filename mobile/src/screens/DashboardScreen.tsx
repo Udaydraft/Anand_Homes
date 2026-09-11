@@ -23,31 +23,29 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     setRoleMode,
     toggleRole,
     selectedSite,
+    sites,
+    inventory,
+    photos,
     activities,
     lowStockAlerts,
     materialRequests,
     deliveries,
   } = useMobileData();
 
-  const adminBarData = [
-    { day: 'Mon', stockIn: 120, stockOut: 85 },
-    { day: 'Tue', stockIn: 160, stockOut: 110 },
-    { day: 'Wed', stockIn: 95, stockOut: 130 },
-    { day: 'Thu', stockIn: 180, stockOut: 90 },
-    { day: 'Fri', stockIn: 140, stockOut: 120 },
-    { day: 'Sat', stockIn: 175, stockOut: 70 },
-    { day: 'Sun', stockIn: 60, stockOut: 140 },
-  ];
+  const totalStockValue = sites.reduce((sum, s) => sum + (s.stockValue || 0), 0);
+  const formattedStockValue =
+    totalStockValue >= 10000000
+      ? `₹${(totalStockValue / 10000000).toFixed(1)} Cr`
+      : totalStockValue >= 100000
+      ? `₹${(totalStockValue / 100000).toFixed(1)} L`
+      : `₹${totalStockValue.toLocaleString()}`;
 
-  const supervisorBarData = [
-    { day: 'Mon', stockIn: 65, stockOut: 35 },
-    { day: 'Tue', stockIn: 90, stockOut: 55 },
-    { day: 'Wed', stockIn: 110, stockOut: 75 },
-    { day: 'Thu', stockIn: 80, stockOut: 95 },
-    { day: 'Fri', stockIn: 70, stockOut: 60 },
-    { day: 'Sat', stockIn: 85, stockOut: 45 },
-    { day: 'Sun', stockIn: 30, stockOut: 20 },
-  ];
+  const pendingRequestsCount = materialRequests.filter((r) => r.status === 'Pending').length;
+  const activeDeliveriesCount = deliveries.filter((d) => d.status === 'In Transit' || d.status === 'Expected').length;
+
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const adminBarData = days.map((day) => ({ day, stockIn: 0, stockOut: 0 }));
+  const supervisorBarData = days.map((day) => ({ day, stockIn: 0, stockOut: 0 }));
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -123,7 +121,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <Text style={styles.kpiLabel}>Total Sites</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>12</Text>
+                  <Text style={styles.kpiValue}>{sites.length}</Text>
                   <View style={[styles.kpiIconBox, { backgroundColor: '#ECFDF5' }]}>
                     <Ionicons name="business" size={16} color="#0D5C3A" />
                   </View>
@@ -136,7 +134,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <Text style={styles.kpiLabel}>Total Materials</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>68</Text>
+                  <Text style={styles.kpiValue}>{inventory.length}</Text>
                   <View style={[styles.kpiIconBox, { backgroundColor: '#ECFDF5' }]}>
                     <Ionicons name="cube" size={16} color="#0D5C3A" />
                   </View>
@@ -146,7 +144,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.kpiCard}>
                 <Text style={styles.kpiLabel}>Stock Value</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>₹24,85,600</Text>
+                  <Text style={styles.kpiValue}>{formattedStockValue}</Text>
                   <View style={[styles.kpiIconBox, { backgroundColor: '#FFFBEB' }]}>
                     <Ionicons name="cash" size={16} color="#D97706" />
                   </View>
@@ -159,7 +157,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <Text style={styles.kpiLabel}>Low Stock Items</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>07</Text>
+                  <Text style={styles.kpiValue}>
+                    {lowStockAlerts.length.toString().padStart(2, '0')}
+                  </Text>
                   <View style={[styles.kpiIconBox, { backgroundColor: '#FFF1F2' }]}>
                     <Ionicons name="warning" size={16} color="#E11D48" />
                   </View>
@@ -180,7 +180,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={[styles.summaryDot, { backgroundColor: '#3B82F6' }]}>
                   <Ionicons name="document-text" size={12} color="#FFFFFF" />
                 </View>
-                <Text style={styles.summaryValue}>08</Text>
+                <Text style={styles.summaryValue}>
+                  {pendingRequestsCount.toString().padStart(2, '0')}
+                </Text>
                 <Text style={styles.summaryLabel}>Pending Requests</Text>
               </TouchableOpacity>
 
@@ -191,7 +193,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={[styles.summaryDot, { backgroundColor: '#10B981' }]}>
                   <Ionicons name="car" size={12} color="#FFFFFF" />
                 </View>
-                <Text style={styles.summaryValue}>05</Text>
+                <Text style={styles.summaryValue}>
+                  {activeDeliveriesCount.toString().padStart(2, '0')}
+                </Text>
                 <Text style={styles.summaryLabel}>Today's Deliveries</Text>
               </TouchableOpacity>
 
@@ -202,7 +206,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={[styles.summaryDot, { backgroundColor: '#8B5CF6' }]}>
                   <Ionicons name="camera" size={12} color="#FFFFFF" />
                 </View>
-                <Text style={styles.summaryValue}>42</Text>
+                <Text style={styles.summaryValue}>
+                  {photos.length.toString().padStart(2, '0')}
+                </Text>
                 <Text style={styles.summaryLabel}>Photos Uploaded</Text>
               </TouchableOpacity>
 
@@ -213,7 +219,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={[styles.summaryDot, { backgroundColor: '#EF4444' }]}>
                   <Ionicons name="alert-circle" size={12} color="#FFFFFF" />
                 </View>
-                <Text style={styles.summaryValue}>07</Text>
+                <Text style={styles.summaryValue}>
+                  {lowStockAlerts.length.toString().padStart(2, '0')}
+                </Text>
                 <Text style={styles.summaryLabel}>Low Stock</Text>
               </TouchableOpacity>
             </View>
@@ -225,7 +233,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
           <>
             <View style={styles.greetingRow}>
               <View>
-                <Text style={styles.greetingSmall}>Hello, Rajesh 👋</Text>
+                <Text style={styles.greetingSmall}>Hello, Supervisor 👋</Text>
                 <Text style={styles.greetingBig}>Good Morning!</Text>
               </View>
 
@@ -235,7 +243,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Weather Widget (Mockup Image 4 screen 2) */}
+            {/* Weather Widget */}
             <View style={styles.weatherCard}>
               <View style={styles.weatherMain}>
                 <Ionicons name="partly-sunny" size={28} color="#F59E0B" />
@@ -257,7 +265,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.kpiCard}>
                 <Text style={styles.kpiLabel}>Total Materials</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>32</Text>
+                  <Text style={styles.kpiValue}>{inventory.length}</Text>
                   <Ionicons name="cube" size={16} color="#0D5C3A" />
                 </View>
               </View>
@@ -265,7 +273,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.kpiCard}>
                 <Text style={styles.kpiLabel}>Stock Value</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>₹8,24,500</Text>
+                  <Text style={styles.kpiValue}>{formattedStockValue}</Text>
                   <Ionicons name="cash" size={16} color="#D97706" />
                 </View>
               </View>
@@ -276,7 +284,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <Text style={styles.kpiLabel}>Low Stock Items</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>04</Text>
+                  <Text style={styles.kpiValue}>
+                    {lowStockAlerts.length.toString().padStart(2, '0')}
+                  </Text>
                   <Ionicons name="warning" size={16} color="#E11D48" />
                 </View>
               </TouchableOpacity>
@@ -287,7 +297,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <Text style={styles.kpiLabel}>Pending Requests</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>03</Text>
+                  <Text style={styles.kpiValue}>
+                    {pendingRequestsCount.toString().padStart(2, '0')}
+                  </Text>
                   <Ionicons name="document-text" size={16} color="#2563EB" />
                 </View>
               </TouchableOpacity>
@@ -299,16 +311,22 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             {/* Today's Activity */}
             <View style={styles.activityCard}>
               <Text style={styles.activityHeading}>Today's Activity</Text>
-              {activities.map((act) => (
-                <View key={act.id} style={styles.activityItem}>
-                  <View style={styles.activityDot} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.activityText}>{act.text}</Text>
-                    <Text style={styles.activitySubtext}>{act.subtext}</Text>
+              {activities.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#94A3B8', paddingVertical: 16, fontSize: 12 }}>
+                  No activity recorded today.
+                </Text>
+              ) : (
+                activities.map((act) => (
+                  <View key={act.id} style={styles.activityItem}>
+                    <View style={styles.activityDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.activityText}>{act.text}</Text>
+                      <Text style={styles.activitySubtext}>{act.subtext}</Text>
+                    </View>
+                    <Text style={styles.activityTime}>{act.time}</Text>
                   </View>
-                  <Text style={styles.activityTime}>{act.time}</Text>
-                </View>
-              ))}
+                ))
+              )}
 
               <TouchableOpacity
                 style={styles.viewAllBtn}

@@ -20,6 +20,28 @@ export const MySiteScreen: React.FC<Props> = ({ navigation }) => {
 
   const site = sites.find((s) => s.name === selectedSite) || sites[0];
 
+  if (!site) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={20} color="#1E293B" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My Site</Text>
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <Ionicons name="business-outline" size={48} color="#94A3B8" />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginTop: 12 }}>
+            No Site Available
+          </Text>
+          <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 6 }}>
+            There are no sites in the system yet. Please add a site to view its details.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>

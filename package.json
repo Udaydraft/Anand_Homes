@@ -15,7 +15,8 @@
     "dev:mobile:tunnel": "npm run tunnel --workspace=mobile",
     "build:shared": "npm run build --workspace=packages/shared",
     "build:web": "npm run build --workspace=web",
-    "test:backend": "cd backend && pytest -v"
+    "test:backend": "cd backend && pytest -v",
+    "seed": "cd backend && python -m app.database.seed"
   },
   "keywords": [
     "monorepo",

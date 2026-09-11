@@ -89,6 +89,28 @@ export const ReportsPage: React.FC = () => {
   ];
 
   const handleDownload = (report: ReportCardItem) => {
+    const csvRows = [
+      ['Report Name', report.title],
+      ['Generated On', new Date().toLocaleDateString('en-GB')],
+      [],
+      ['Material / Item', 'Project Site', 'Quantity', 'Unit', 'Estimated Value (INR)'],
+      ...inventory.map((inv) => [
+        inv.name,
+        inv.site,
+        inv.totalStock,
+        inv.unit,
+        (inv.totalStock * 380).toString(),
+      ]),
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.map((e) => e.join(',')).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${report.id}_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
     setDownloadSuccess(true);
     setTimeout(() => setDownloadSuccess(false), 3000);
   };
@@ -168,7 +190,9 @@ export const ReportsPage: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">{selectedReport.title}</h3>
-                  <p className="text-[11px] text-slate-400">Preview generated on 28 May 2025</p>
+                  <p className="text-[11px] text-slate-400">
+                    Preview generated on {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
                 </div>
               </div>
               <button
@@ -179,29 +203,37 @@ export const ReportsPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Simulated Report Data Table */}
+            {/* Real Report Data Table */}
             <div className="py-4">
               <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-slate-600 font-semibold text-[11px]">
                     <tr>
-                      <th className="py-2.5 px-3">Item / Site</th>
-                      <th className="py-2.5 px-3">Metric</th>
+                      <th className="py-2.5 px-3">Item / Material</th>
+                      <th className="py-2.5 px-3">Site</th>
                       <th className="py-2.5 px-3">Quantity</th>
                       <th className="py-2.5 px-3 text-right">Value (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {inventory.slice(0, 5).map((inv) => (
-                      <tr key={inv.id}>
-                        <td className="py-2 px-3 font-semibold text-slate-800">{inv.name}</td>
-                        <td className="py-2 px-3 text-slate-500">{inv.site}</td>
-                        <td className="py-2 px-3 font-bold text-slate-700">{inv.totalStock} {inv.unit}</td>
-                        <td className="py-2 px-3 text-right font-mono font-medium text-slate-800">
-                          ₹{(inv.totalStock * 380).toLocaleString()}
+                    {inventory.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-slate-400">
+                          No inventory stock records found to compile this report.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      inventory.slice(0, 8).map((inv) => (
+                        <tr key={inv.id}>
+                          <td className="py-2 px-3 font-semibold text-slate-800">{inv.name}</td>
+                          <td className="py-2 px-3 text-slate-500">{inv.site}</td>
+                          <td className="py-2 px-3 font-bold text-slate-700">{inv.totalStock} {inv.unit}</td>
+                          <td className="py-2 px-3 text-right font-mono font-medium text-slate-800">
+                            ₹{(inv.totalStock * 380).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

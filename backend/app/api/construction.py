@@ -1,6 +1,13 @@
+import os
+import shutil
+import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 from app.database.mongodb import get_database
 from app.schemas.construction import (
     ActivityResponse,
@@ -249,6 +256,36 @@ async def list_photos(
     service = ConstructionService(db)
     photos = await service.list_photos(site, type)
     return ApiResponse(success=True, message="Photos retrieved", data=photos)
+
+
+@router.post("/photos/upload-file", response_model=ApiResponse[dict], status_code=status.HTTP_201_CREATED)
+async def upload_photo_file(file: UploadFile = File(...)):
+    allowed_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in allowed_exts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid image file extension '{ext}'. Allowed: {', '.join(allowed_exts)}",
+        )
+
+    unique_name = f"site_photo_{uuid.uuid4().hex[:12]}{ext}"
+    dest_path = UPLOAD_DIR / unique_name
+
+    try:
+        with open(dest_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to write image file: {exc}",
+        )
+
+    file_url = f"/uploads/{unique_name}"
+    return ApiResponse(
+        success=True,
+        message="Image file uploaded successfully",
+        data={"url": file_url, "filename": unique_name},
+    )
 
 
 @router.post("/photos", response_model=ApiResponse[SitePhotoResponse], status_code=status.HTTP_201_CREATED)

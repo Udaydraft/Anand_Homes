@@ -19,6 +19,7 @@ class UserBase(BaseModel):
 
 class UserRegisterRequest(UserBase):
     password: str = Field(..., min_length=8, max_length=128, description="Minimum 8 characters")
+    role: Optional[str] = Field("supervisor", description="Role: admin or supervisor")
 
 
 class UserLoginRequest(BaseModel):

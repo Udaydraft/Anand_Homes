@@ -15,6 +15,7 @@ export const authService = {
     const data = res.data.data;
     setTokens(data.tokens.access_token, data.tokens.refresh_token);
     localStorage.setItem('user_info', JSON.stringify(data.user));
+    localStorage.setItem('ah_user_role', data.user.role);
     return data;
   },
 
@@ -23,6 +24,7 @@ export const authService = {
     const data = res.data.data;
     setTokens(data.tokens.access_token, data.tokens.refresh_token);
     localStorage.setItem('user_info', JSON.stringify(data.user));
+    localStorage.setItem('ah_user_role', data.user.role);
     return data;
   },
 
@@ -39,6 +41,7 @@ export const authService = {
     const res = await apiClient.get<ApiResponse<User>>('/auth/me');
     const user = res.data.data;
     localStorage.setItem('user_info', JSON.stringify(user));
+    localStorage.setItem('ah_user_role', user.role);
     return user;
   },
 
@@ -49,14 +52,24 @@ export const authService = {
       // Ignore network errors on logout
     } finally {
       clearTokens();
+      localStorage.removeItem('ah_user_role');
     }
   },
 
   async checkHealth(): Promise<HealthResponse> {
     const res = await apiClient.get<HealthResponse>('/health', {
-      // strip /api prefix from baseURL for root /health if needed, or call directly
       baseURL: import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:8000',
     });
+    return res.data;
+  },
+
+  async getDatabaseStatus(): Promise<any> {
+    const res = await apiClient.get<ApiResponse<any>>('/database/status');
+    return res.data.data;
+  },
+
+  async retryAtlas(): Promise<any> {
+    const res = await apiClient.post<ApiResponse<any>>('/database/retry-atlas');
     return res.data;
   },
 };

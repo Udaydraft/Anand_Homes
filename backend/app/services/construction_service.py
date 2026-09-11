@@ -61,6 +61,14 @@ class ConstructionService:
     # -----------------------------------------------------------------------
     # Helper
     # -----------------------------------------------------------------------
+    async def _persist(self) -> None:
+        try:
+            from app.database.mongodb import db_manager
+            db_manager.mark_dirty()
+            await db_manager.save_to_disk()
+        except Exception:
+            pass
+
     @staticmethod
     def _doc_to_res(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if not doc:
@@ -105,6 +113,7 @@ class ConstructionService:
             site=data.name,
             act_type="stock_in",
         )
+        await self._persist()
         return SiteResponse(**self._doc_to_res(doc))
 
     async def update_site(self, site_id: str, data: SiteUpdate) -> Optional[SiteResponse]:
@@ -119,12 +128,16 @@ class ConstructionService:
                 {"$set": update_fields},
                 return_document=True,
             )
+            await self._persist()
             return SiteResponse(**self._doc_to_res(res)) if res else None
         return await self.get_site(site_id)
 
     async def delete_site(self, site_id: str) -> bool:
         res = await self.sites.delete_one({"$or": [{"id": site_id}, {"_id": site_id}]})
-        return res.deleted_count > 0
+        if res.deleted_count > 0:
+            await self._persist()
+            return True
+        return False
 
     # -----------------------------------------------------------------------
     # Inventory CRUD
@@ -260,7 +273,7 @@ class ConstructionService:
             site=data.site,
             act_type="stock_in",
         )
-
+        await self._persist()
         return StockTransactionResponse(**self._doc_to_res(tx_doc))
 
     async def record_stock_out(self, data: StockOutRequest) -> StockTransactionResponse:
@@ -302,11 +315,11 @@ class ConstructionService:
         # 3. Log Activity
         await self.log_activity(
             text=f"Stock Out: {data.quantity} {data.unit} of {data.material}",
-            subtext=f"Used for: {data.usedFor} | By: {data.requestedBy}",
+            subtext=f"For: {data.usedFor} | Req By: {data.requestedBy}",
             site=data.site,
             act_type="stock_out",
         )
-
+        await self._persist()
         return StockTransactionResponse(**self._doc_to_res(tx_doc))
 
     async def list_transactions(self, site: Optional[str] = None) -> List[StockTransactionResponse]:
@@ -362,6 +375,7 @@ class ConstructionService:
             site=data.site,
             act_type="request",
         )
+        await self._persist()
         return MaterialRequestResponse(**self._doc_to_res(doc))
 
     async def update_request_status(self, request_id: str, status: str) -> Optional[MaterialRequestResponse]:
@@ -377,6 +391,7 @@ class ConstructionService:
                 site=res.get("site", "All Sites"),
                 act_type="request",
             )
+            await self._persist()
             return MaterialRequestResponse(**self._doc_to_res(res))
         return None
 
@@ -384,7 +399,10 @@ class ConstructionService:
         res = await self.requests.delete_one(
             {"$or": [{"id": request_id}, {"_id": request_id}, {"requestId": request_id}]}
         )
-        return res.deleted_count > 0
+        if res.deleted_count > 0:
+            await self._persist()
+            return True
+        return False
 
     # -----------------------------------------------------------------------
     # Deliveries
@@ -422,6 +440,7 @@ class ConstructionService:
             site=doc["site"],
             act_type="delivery",
         )
+        await self._persist()
         return DeliveryResponse(**self._doc_to_res(doc))
 
     async def update_delivery(self, delivery_id: str, data: DeliveryUpdate) -> Optional[DeliveryResponse]:
@@ -432,6 +451,7 @@ class ConstructionService:
                 {"$set": update_fields},
                 return_document=True,
             )
+            await self._persist()
             return DeliveryResponse(**self._doc_to_res(res)) if res else None
         return None
 
@@ -439,7 +459,10 @@ class ConstructionService:
         res = await self.deliveries.delete_one(
             {"$or": [{"id": delivery_id}, {"_id": delivery_id}, {"deliveryId": delivery_id}]}
         )
-        return res.deleted_count > 0
+        if res.deleted_count > 0:
+            await self._persist()
+            return True
+        return False
 
     # -----------------------------------------------------------------------
     # Photos
@@ -475,11 +498,15 @@ class ConstructionService:
             site=data.site,
             act_type="photo",
         )
+        await self._persist()
         return SitePhotoResponse(**self._doc_to_res(doc))
 
     async def delete_photo(self, photo_id: str) -> bool:
         res = await self.photos.delete_one({"$or": [{"id": photo_id}, {"_id": photo_id}]})
-        return res.deleted_count > 0
+        if res.deleted_count > 0:
+            await self._persist()
+            return True
+        return False
 
     # -----------------------------------------------------------------------
     # Activities & Dashboard Summary
@@ -549,185 +576,8 @@ class ConstructionService:
         )
 
     # -----------------------------------------------------------------------
-    # Database Auto-Seeding
+    # Database Auto-Seeding (Clean - No dummy data)
     # -----------------------------------------------------------------------
     async def seed_database_if_empty(self) -> None:
-        """Seeds initial construction data into MongoDB if the collections are empty."""
-        try:
-            sites_count = await self.sites.count_documents({})
-            if sites_count > 0:
-                logger.info("MongoDB already contains %d sites; skipping auto-seed.", sites_count)
-                return
-
-            logger.info("MongoDB is empty. Seeding initial Anand Homes construction data...")
-
-            # 1. Sites
-            initial_sites = [
-                {
-                    "_id": "s-1",
-                    "id": "s-1",
-                    "code": "RBL-S-001",
-                    "name": "Site Alpha",
-                    "location": "Chennai, TN",
-                    "supervisor": "Rajesh Kumar",
-                    "status": "Active",
-                    "totalMaterials": 32,
-                    "stockValue": 824500,
-                    "stockValueFormatted": "₹8.2 L",
-                    "imageUrl": "https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=600&auto=format&fit=crop&q=80",
-                    "startDate": "12 Jan 2025",
-                    "contact": "98765 43210",
-                    "projectType": "Anna Nagar Residential",
-                },
-                {
-                    "_id": "s-2",
-                    "id": "s-2",
-                    "code": "RBL-S-002",
-                    "name": "Site Beta",
-                    "location": "Coimbatore, TN",
-                    "supervisor": "Siva Kumar",
-                    "status": "Active",
-                    "totalMaterials": 26,
-                    "stockValue": 661200,
-                    "stockValueFormatted": "₹6.6 L",
-                    "imageUrl": "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=600&auto=format&fit=crop&q=80",
-                    "startDate": "20 Feb 2025",
-                    "contact": "98765 43211",
-                    "projectType": "Commercial Complex",
-                },
-                {
-                    "_id": "s-3",
-                    "id": "s-3",
-                    "code": "RBL-S-003",
-                    "name": "Site Gamma",
-                    "location": "Madurai, TN",
-                    "supervisor": "Karthik R",
-                    "status": "Active",
-                    "totalMaterials": 19,
-                    "stockValue": 418000,
-                    "stockValueFormatted": "₹4.2 L",
-                    "imageUrl": "https://images.unsplash.com/photo-1590381105924-c72589b9ef3f?w=600&auto=format&fit=crop&q=80",
-                    "startDate": "05 Mar 2025",
-                    "contact": "98765 43212",
-                    "projectType": "Villa Enclave Phase 1",
-                },
-            ]
-            await self.sites.insert_many(initial_sites)
-
-            # 2. Inventory Items
-            initial_inventory = [
-                {"_id": "inv-1", "id": "inv-1", "name": "UltraTech PPC Cement", "category": "Cement", "unit": "Bags", "totalStock": 420, "minStock": 100, "status": "Good", "site": "Site Alpha"},
-                {"_id": "inv-2", "id": "inv-2", "name": "TMT Steel Bars 12mm", "category": "Steel", "unit": "Tons", "totalStock": 8.5, "minStock": 15, "status": "Low", "site": "Site Alpha"},
-                {"_id": "inv-3", "id": "inv-3", "name": "River Sand (Coarse)", "category": "Aggregate", "unit": "Cu.ft", "totalStock": 1200, "minStock": 400, "status": "Good", "site": "Site Alpha"},
-                {"_id": "inv-4", "id": "inv-4", "name": "Red Clay Bricks", "category": "Masonry", "unit": "Pieces", "totalStock": 4500, "minStock": 1000, "status": "Good", "site": "Site Alpha"},
-                {"_id": "inv-5", "id": "inv-5", "name": "Berger Weathercoat Paint", "category": "Finishing", "unit": "Litres", "totalStock": 0, "minStock": 50, "status": "Out of Stock", "site": "Site Alpha"},
-                {"_id": "inv-6", "id": "inv-6", "name": "UltraTech Super Cement", "category": "Cement", "unit": "Bags", "totalStock": 310, "minStock": 120, "status": "Good", "site": "Site Beta"},
-                {"_id": "inv-7", "id": "inv-7", "name": "TMT Steel Bars 16mm", "category": "Steel", "unit": "Tons", "totalStock": 4.2, "minStock": 10, "status": "Low", "site": "Site Beta"},
-            ]
-            await self.inventory.insert_many(initial_inventory)
-
-            # 3. Material Requests
-            initial_requests = [
-                {
-                    "_id": "req-1",
-                    "id": "req-1",
-                    "requestId": "REQ-2025-001",
-                    "site": "Site Alpha",
-                    "material": "TMT Steel Bars 12mm",
-                    "quantity": 10,
-                    "unit": "Tons",
-                    "requestedBy": "Rajesh Kumar (Supervisor)",
-                    "requestedOn": "09 Mar 2025, 10:30 AM",
-                    "requiredDate": "14 Mar 2025",
-                    "purpose": "Column reinforcement for 2nd floor slab",
-                    "status": "Pending",
-                    "notes": "Urgent - current stock is critical",
-                },
-                {
-                    "_id": "req-2",
-                    "id": "req-2",
-                    "requestId": "REQ-2025-002",
-                    "site": "Site Beta",
-                    "material": "UltraTech Super Cement",
-                    "quantity": 200,
-                    "unit": "Bags",
-                    "requestedBy": "Siva Kumar (Supervisor)",
-                    "requestedOn": "08 Mar 2025, 03:15 PM",
-                    "requiredDate": "12 Mar 2025",
-                    "purpose": "Brickwork for boundary wall",
-                    "status": "Approved",
-                    "notes": "PO sent to Dalmia distributors",
-                },
-            ]
-            await self.requests.insert_many(initial_requests)
-
-            # 4. Deliveries
-            initial_deliveries = [
-                {
-                    "_id": "del-1",
-                    "id": "del-1",
-                    "deliveryId": "DEL-2025-089",
-                    "supplier": "Tata Tiscon Direct",
-                    "site": "Site Alpha",
-                    "material": "TMT Steel Bars 12mm",
-                    "expectedQty": 10,
-                    "receivedQty": 0,
-                    "unit": "Tons",
-                    "status": "In Transit",
-                    "expectedDate": "11 Mar 2025",
-                    "invoiceNo": "TT-CHE-8902",
-                },
-                {
-                    "_id": "del-2",
-                    "id": "del-2",
-                    "deliveryId": "DEL-2025-088",
-                    "supplier": "UltraTech Cements Hub",
-                    "site": "Site Alpha",
-                    "material": "UltraTech PPC Cement",
-                    "expectedQty": 300,
-                    "receivedQty": 300,
-                    "unit": "Bags",
-                    "status": "Received",
-                    "receivedOn": "08 Mar 2025, 02:40 PM",
-                    "invoiceNo": "UTC-2025-110",
-                    "receivedBy": "Rajesh Kumar",
-                },
-            ]
-            await self.deliveries.insert_many(initial_deliveries)
-
-            # 5. Photos
-            initial_photos = [
-                {
-                    "_id": "p-1",
-                    "id": "p-1",
-                    "title": "Cement Unloading - Truck TN09-BX-4421",
-                    "site": "Site Alpha",
-                    "type": "Stock In",
-                    "timestamp": "08 Mar 2025, 02:45 PM",
-                    "imageUrl": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&auto=format&fit=crop&q=80",
-                    "uploader": "Rajesh Kumar",
-                },
-                {
-                    "_id": "p-2",
-                    "id": "p-2",
-                    "title": "2nd Floor Slab Shuttering Progress",
-                    "site": "Site Alpha",
-                    "type": "Site Progress",
-                    "timestamp": "07 Mar 2025, 11:30 AM",
-                    "imageUrl": "https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=600&auto=format&fit=crop&q=80",
-                    "uploader": "Ramesh E (Site Eng)",
-                },
-            ]
-            await self.photos.insert_many(initial_photos)
-
-            # 6. Activities
-            initial_activities = [
-                {"_id": "a-1", "id": "a-1", "text": "Stock In: 300 Bags UltraTech Cement", "subtext": "Site Alpha | Truck TN-09-BX-4421", "site": "Site Alpha", "time": "10m ago", "type": "stock_in"},
-                {"_id": "a-2", "id": "a-2", "text": "Material Request REQ-2025-001 created", "subtext": "10 Tons TMT Steel 12mm | Pending", "site": "Site Alpha", "time": "45m ago", "type": "request"},
-                {"_id": "a-3", "id": "a-3", "text": "Stock Out: 40 Bags Cement issued", "subtext": "Site Alpha | Foundation work", "site": "Site Alpha", "time": "2h ago", "type": "stock_out"},
-            ]
-            await self.activities.insert_many(initial_activities)
-
-            logger.info("Successfully seeded Anand Homes database with sample construction data!")
-        except Exception as exc:
-            logger.warning("Auto-seed encountered an issue: %s", exc)
+        """Clean start - no dummy data is seeded."""
+        logger.info("Database initialized cleanly without dummy data.")

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDashboardContext } from '../context/DashboardContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Building2,
   MapPin,
@@ -15,12 +15,29 @@ import {
   Upload,
   ChevronRight,
   Clock,
+  Package,
 } from 'lucide-react';
+import { EmptyState } from '../components/common/EmptyState';
 
 export const MySitePage: React.FC = () => {
-  const { selectedSite, sites, photos, inventory } = useDashboardContext();
+  const { selectedSite, sites, photos, inventory, deliveries } = useDashboardContext();
+  const navigate = useNavigate();
 
   const site = sites.find((s) => s.name === selectedSite) || sites[0];
+
+  if (!site) {
+    return (
+      <EmptyState
+        variant="card"
+        icon={<Building2 className="w-10 h-10 text-slate-400" />}
+        title="No Sites Found"
+        description="There are no construction sites created yet. Add your first site to track inventory, progress photos, and deliveries."
+        actionLabel="Go to Sites"
+        onAction={() => navigate('/sites')}
+      />
+    );
+  }
+
   const sitePhotos = photos.filter((p) => p.site === site.name);
   const siteInventory = inventory.filter((i) => i.site === site.name);
 
@@ -112,18 +129,18 @@ export const MySitePage: React.FC = () => {
               <ArrowDownToLine className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 font-semibold block">Today's Stock In</span>
-              <span className="text-lg font-extrabold text-slate-900">16 Items</span>
+              <span className="text-[11px] text-slate-400 font-semibold block">Total Deliveries</span>
+              <span className="text-lg font-extrabold text-slate-900">{deliveries.filter((d) => d.site === site.name).length} Shipments</span>
             </div>
           </div>
 
           <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-              <ArrowUpFromLine className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Camera className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 font-semibold block">Today's Stock Out</span>
-              <span className="text-lg font-extrabold text-slate-900">8 Items</span>
+              <span className="text-[11px] text-slate-400 font-semibold block">Site Photos</span>
+              <span className="text-lg font-extrabold text-slate-900">{sitePhotos.length} Uploads</span>
             </div>
           </div>
         </div>
@@ -179,17 +196,21 @@ export const MySitePage: React.FC = () => {
               View Gallery
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {sitePhotos.slice(0, 6).map((p) => (
-              <div key={p.id} className="rounded-lg overflow-hidden border border-slate-200 aspect-4/3 relative group">
-                <img src={p.imageUrl} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent flex flex-col justify-end p-2 text-white">
-                  <span className="text-[10px] font-bold leading-tight truncate">{p.title}</span>
-                  <span className="text-[8px] text-slate-300 truncate">{p.timestamp}</span>
+          {sitePhotos.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {sitePhotos.slice(0, 6).map((p) => (
+                <div key={p.id} className="rounded-lg overflow-hidden border border-slate-200 aspect-4/3 relative group">
+                  <img src={p.imageUrl} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent flex flex-col justify-end p-2 text-white">
+                    <span className="text-[10px] font-bold leading-tight truncate">{p.title}</span>
+                    <span className="text-[8px] text-slate-300 truncate">{p.timestamp}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-slate-400 text-xs">No progress photos uploaded for this site yet.</p>
+          )}
         </div>
       </div>
     </div>

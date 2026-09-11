@@ -58,6 +58,7 @@ export interface Delivery {
   invoiceNo?: string;
   receivedBy?: string;
   shortage?: string;
+  photos?: string[];
 }
 
 export interface SitePhoto {

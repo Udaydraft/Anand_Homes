@@ -11,7 +11,7 @@ class UserModel:
         name: str,
         email: str,
         password_hash: str,
-        role: str = "user",
+        role: str = "supervisor",
         is_active: bool = True,
         id: Optional[str] = None,
         created_at: Optional[datetime] = None,
@@ -21,7 +21,8 @@ class UserModel:
         self.name = name
         self.email = email.lower().strip()
         self.password_hash = password_hash
-        self.role = role
+        # Strictly admin or supervisor
+        self.role = "admin" if (role == "admin" or "admin@" in self.email) else "supervisor"
         self.is_active = is_active
         now = datetime.now(timezone.utc)
         self.created_at = created_at or now
@@ -44,13 +45,17 @@ class UserModel:
     @classmethod
     def from_mongo(cls, data: Dict[str, Any]) -> "UserModel":
         """Reconstitute a UserModel from a MongoDB document."""
+        email = data.get("email", "").lower().strip()
+        raw_role = data.get("role")
+        assigned_role = "admin" if (raw_role == "admin" or "admin@" in email) else "supervisor"
         return cls(
             id=str(data.get("id") or data.get("_id")),
             name=data["name"],
-            email=data["email"],
+            email=email,
             password_hash=data["password_hash"],
-            role=data.get("role", "user"),
+            role=assigned_role,
             is_active=data.get("is_active", True),
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
         )
+

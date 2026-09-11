@@ -60,3 +60,26 @@ def require_roles(allowed_roles: List[str]) -> Callable:
         return current_user
 
     return role_checker
+
+
+optional_security = HTTPBearer(auto_error=False)
+
+
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> Optional[UserModel]:
+    """Dependency that attempts to extract current user without throwing error if absent."""
+    if not credentials:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+        if not payload or payload.get("type") != "access":
+            return None
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        user_service = UserService(db)
+        return await user_service.get_by_id(user_id)
+    except Exception:
+        return None

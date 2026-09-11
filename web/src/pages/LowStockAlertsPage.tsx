@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useDashboardContext } from '../context/DashboardContext';
 import {
   AlertTriangle,
@@ -10,10 +10,14 @@ import {
   MapPin,
   Clock,
   ShieldAlert,
+  CheckCircle2,
 } from 'lucide-react';
+import { Button } from '../components/Button';
+import { EmptyState } from '../components/common/EmptyState';
 
 export const LowStockAlertsPage: React.FC = () => {
   const { lowStockAlerts } = useDashboardContext();
+  const navigate = useNavigate();
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -25,27 +29,41 @@ export const LowStockAlertsPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Warning Banner Matching Mockup */}
-      <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-amber-100 text-amber-700">
-            <AlertTriangle className="w-5 h-5" />
+      {lowStockAlerts.length === 0 ? (
+        <EmptyState
+          variant="card"
+          icon={<CheckCircle2 className="w-8 h-8 text-emerald-600" />}
+          title="All Stock Levels Optimal"
+          description="Great job! None of your construction materials are currently below their safety threshold across any active sites."
+          actionLabel="View Inventory"
+          onAction={() => navigate('/inventory')}
+        />
+      ) : (
+        <>
+          {/* Warning Banner Matching Mockup */}
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-100 text-amber-700">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm">
+                  {String(lowStockAlerts.length).padStart(2, '0')} items are below minimum level
+                </h4>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Urgent replenishment recommended to maintain construction schedule across active sites
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="brand"
+              size="sm"
+              icon={<Plus className="w-3.5 h-3.5" />}
+              onClick={() => navigate('/material-requests')}
+            >
+              Create Indent
+            </Button>
           </div>
-          <div>
-            <h4 className="font-extrabold text-sm">07 items are below minimum level</h4>
-            <p className="text-xs text-amber-700 mt-0.5">
-              Urgent replenishment required to maintain construction schedule across 3 sites
-            </p>
-          </div>
-        </div>
-        <Link
-          to="/material-requests"
-          className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0D5C3A] hover:bg-[#0A482E] text-white text-xs font-bold rounded-lg transition-all shadow-xs"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Create Indent</span>
-        </Link>
-      </div>
 
       {/* Items List Cards */}
       <div className="space-y-3">
@@ -102,6 +120,8 @@ export const LowStockAlertsPage: React.FC = () => {
           </div>
         ))}
       </div>
+      </>
+      )}
 
       {/* Bottom Actions */}
       <div className="pt-2 flex items-center justify-between">

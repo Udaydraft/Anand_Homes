@@ -84,232 +84,41 @@ interface DashboardContextType {
   deleteDelivery: (id: string) => Promise<void>;
 }
 
-const initialSites: Site[] = [
-  {
-    id: 's-1',
-    code: 'RBL-S-001',
-    name: 'Site Alpha',
-    location: 'Chennai, TN',
-    supervisor: 'Rajesh Kumar',
-    status: 'Active',
-    totalMaterials: 32,
-    stockValue: 824500,
-    stockValueFormatted: '₹8,24,500',
-    imageUrl: 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=600&auto=format&fit=crop&q=80',
-    startDate: '12 Jan 2025',
-    contact: '98765 43210',
-    projectType: 'Anna Nagar Residential',
-  },
-  {
-    id: 's-2',
-    code: 'RBL-S-002',
-    name: 'Site Beta',
-    location: 'Coimbatore, TN',
-    supervisor: 'Siva Kumar',
-    status: 'Active',
-    totalMaterials: 26,
-    stockValue: 661200,
-    stockValueFormatted: '₹6,61,200',
-    imageUrl: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=600&auto=format&fit=crop&q=80',
-    startDate: '20 Feb 2025',
-    contact: '98765 43211',
-    projectType: 'Commercial Building',
-  },
-  {
-    id: 's-3',
-    code: 'RBL-S-003',
-    name: 'Site Gamma',
-    location: 'Madurai, TN',
-    supervisor: 'Mani',
-    status: 'Active',
-    totalMaterials: 28,
-    stockValue: 645000,
-    stockValueFormatted: '₹6,45,000',
-    imageUrl: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600&auto=format&fit=crop&q=80',
-    startDate: '05 Mar 2025',
-    contact: '98765 43212',
-    projectType: 'Villa Construction Project',
-  },
-];
-
-const initialInventory: InventoryItem[] = [
-  {
-    id: 'inv-1',
-    name: 'UltraTech PPC Cement',
-    category: 'Cement',
-    unit: 'Bags',
-    totalStock: 420,
-    minStock: 100,
-    status: 'Good',
-    site: 'Site Alpha',
-  },
-  {
-    id: 'inv-2',
-    name: 'TMT Steel Bars 12mm',
-    category: 'Steel',
-    unit: 'Tons',
-    totalStock: 8.5,
-    minStock: 15,
-    status: 'Low',
-    site: 'Site Alpha',
-  },
-  {
-    id: 'inv-3',
-    name: 'River Sand (Coarse)',
-    category: 'Aggregate',
-    unit: 'Cu.ft',
-    totalStock: 1200,
-    minStock: 400,
-    status: 'Good',
-    site: 'Site Alpha',
-  },
-  {
-    id: 'inv-4',
-    name: 'Red Clay Bricks',
-    category: 'Masonry',
-    unit: 'Pieces',
-    totalStock: 4500,
-    minStock: 1000,
-    status: 'Good',
-    site: 'Site Alpha',
-  },
-  {
-    id: 'inv-5',
-    name: 'Berger Weathercoat Paint',
-    category: 'Finishing',
-    unit: 'Litres',
-    totalStock: 0,
-    minStock: 50,
-    status: 'Out of Stock',
-    site: 'Site Alpha',
-  },
-  {
-    id: 'inv-6',
-    name: 'UltraTech Super Cement',
-    category: 'Cement',
-    unit: 'Bags',
-    totalStock: 310,
-    minStock: 120,
-    status: 'Good',
-    site: 'Site Beta',
-  },
-  {
-    id: 'inv-7',
-    name: 'TMT Steel Bars 16mm',
-    category: 'Steel',
-    unit: 'Tons',
-    totalStock: 4.2,
-    minStock: 10,
-    status: 'Low',
-    site: 'Site Beta',
-  },
-];
-
-const initialRequests: MaterialRequest[] = [
-  {
-    id: 'req-1',
-    requestId: 'REQ-2025-001',
-    site: 'Site Alpha',
-    material: 'TMT Steel Bars 12mm',
-    quantity: 10,
-    unit: 'Tons',
-    requestedBy: 'Rajesh Kumar (Supervisor)',
-    requestedOn: '09 Mar 2025, 10:30 AM',
-    requiredDate: '14 Mar 2025',
-    purpose: 'Column reinforcement for 2nd floor slab',
-    status: 'Pending',
-    notes: 'Urgent - current stock is critical',
-  },
-  {
-    id: 'req-2',
-    requestId: 'REQ-2025-002',
-    site: 'Site Beta',
-    material: 'UltraTech Super Cement',
-    quantity: 200,
-    unit: 'Bags',
-    requestedBy: 'Siva Kumar (Supervisor)',
-    requestedOn: '08 Mar 2025, 03:15 PM',
-    requiredDate: '12 Mar 2025',
-    purpose: 'Brickwork for boundary wall',
-    status: 'Approved',
-    notes: 'PO sent to Dalmia distributors',
-  },
-];
-
-const initialDeliveries: Delivery[] = [
-  {
-    id: 'del-1',
-    deliveryId: 'DEL-2025-089',
-    supplier: 'Tata Tiscon Direct',
-    site: 'Site Alpha',
-    material: 'TMT Steel Bars 12mm',
-    expectedQty: 10,
-    receivedQty: 0,
-    unit: 'Tons',
-    status: 'In Transit',
-    expectedDate: '11 Mar 2025',
-    invoiceNo: 'TT-CHE-8902',
-  },
-  {
-    id: 'del-2',
-    deliveryId: 'DEL-2025-088',
-    supplier: 'UltraTech Cements Hub',
-    site: 'Site Alpha',
-    material: 'UltraTech PPC Cement',
-    expectedQty: 300,
-    receivedQty: 300,
-    unit: 'Bags',
-    status: 'Received',
-    receivedOn: '08 Mar 2025, 02:40 PM',
-    invoiceNo: 'UTC-2025-110',
-    receivedBy: 'Rajesh Kumar',
-  },
-];
-
-const initialPhotos: SitePhoto[] = [
-  {
-    id: 'p-1',
-    title: 'Cement Unloading - Truck TN09-BX-4421',
-    site: 'Site Alpha',
-    type: 'Stock In',
-    timestamp: '08 Mar 2025, 02:45 PM',
-    imageUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&auto=format&fit=crop&q=80',
-    uploader: 'Rajesh Kumar',
-  },
-  {
-    id: 'p-2',
-    title: '2nd Floor Slab Shuttering Progress',
-    site: 'Site Alpha',
-    type: 'Site Progress',
-    timestamp: '07 Mar 2025, 11:30 AM',
-    imageUrl: 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=600&auto=format&fit=crop&q=80',
-    uploader: 'Ramesh E (Site Eng)',
-  },
-];
-
-const initialActivities: ActivityItem[] = [
-  { id: 'a-1', text: 'Stock In: 300 Bags UltraTech Cement', subtext: 'Site Alpha | Truck TN-09-BX-4421', site: 'Site Alpha', time: '10m ago', type: 'stock_in' },
-  { id: 'a-2', text: 'Material Request REQ-2025-001 created', subtext: '10 Tons TMT Steel 12mm | Pending', site: 'Site Alpha', time: '45m ago', type: 'request' },
-  { id: 'a-3', text: 'Stock Out: 40 Bags Cement issued', subtext: 'Site Alpha | Foundation work', site: 'Site Alpha', time: '2h ago', type: 'stock_out' },
-];
-
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
 export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [roleMode, setRoleMode] = useState<UserRoleMode>('admin');
+  const [roleMode, setRoleModeState] = useState<UserRoleMode>(() => {
+    const saved = localStorage.getItem('ah_user_role');
+    if (saved === 'supervisor' || saved === 'admin') return saved;
+    const userJson = localStorage.getItem('user_info');
+    if (userJson) {
+      try {
+        const u = JSON.parse(userJson);
+        if (u.role === 'supervisor') return 'supervisor';
+        if (u.role === 'admin') return 'admin';
+      } catch {}
+    }
+    return 'admin';
+  });
+
+  const setRoleMode = (mode: UserRoleMode) => {
+    localStorage.setItem('ah_user_role', mode);
+    setRoleModeState(mode);
+  };
+
   const [selectedSite, setSelectedSite] = useState<string>('All Sites');
   const [globalSearch, setGlobalSearch] = useState<string>('');
-  const [selectedDate, setSelectedDate] = useState<string>('2025-05-28');
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
 
-  // Data collections
-  const [sites, setSites] = useState<Site[]>(initialSites);
-  const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
-  const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>(initialRequests);
-  const [deliveries, setDeliveries] = useState<Delivery[]>(initialDeliveries);
-  const [photos, setPhotos] = useState<SitePhoto[]>(initialPhotos);
+  // Data collections (Empty - loaded from MongoDB via API)
+  const [sites, setSites] = useState<Site[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>([]);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [photos, setPhotos] = useState<SitePhoto[]>([]);
   const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlertItem[]>([]);
-  const [activities, setActivities] = useState<ActivityItem[]>(initialActivities);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
 
   // Compute site names list
   const sitesList = ['All Sites', ...sites.map((s) => s.name)];
@@ -320,43 +129,43 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       // 1. Sites
       const backendSites = await constructionService.getSites();
-      if (backendSites && backendSites.length > 0) {
+      if (Array.isArray(backendSites)) {
         setSites(backendSites);
       }
 
       // 2. Inventory
       const backendInv = await constructionService.getInventory(selectedSite);
-      if (backendInv) {
+      if (Array.isArray(backendInv)) {
         setInventory(backendInv);
       }
 
       // 3. Low stock alerts
       const backendAlerts = await constructionService.getLowStock(selectedSite);
-      if (backendAlerts) {
+      if (Array.isArray(backendAlerts)) {
         setLowStockAlerts(backendAlerts);
       }
 
       // 4. Requests
       const backendReqs = await constructionService.getRequests(selectedSite);
-      if (backendReqs) {
+      if (Array.isArray(backendReqs)) {
         setMaterialRequests(backendReqs);
       }
 
       // 5. Deliveries
       const backendDelivs = await constructionService.getDeliveries(selectedSite);
-      if (backendDelivs) {
+      if (Array.isArray(backendDelivs)) {
         setDeliveries(backendDelivs);
       }
 
       // 6. Photos
       const backendPhotos = await constructionService.getPhotos(selectedSite);
-      if (backendPhotos) {
+      if (Array.isArray(backendPhotos)) {
         setPhotos(backendPhotos);
       }
 
       // 7. Activities
       const backendActs = await constructionService.getActivities(selectedSite);
-      if (backendActs && backendActs.length > 0) {
+      if (Array.isArray(backendActs)) {
         setActivities(backendActs);
       }
     } catch (err) {

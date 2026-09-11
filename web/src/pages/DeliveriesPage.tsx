@@ -15,9 +15,11 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { Delivery } from '@project/shared';
+import { Button } from '../components/Button';
+import { EmptyState } from '../components/common/EmptyState';
 
 export const DeliveriesPage: React.FC = () => {
-  const { deliveries, sitesList, recordDelivery, globalSearch } = useDashboardContext();
+  const { deliveries, sites, recordDelivery, globalSearch } = useDashboardContext();
 
   const [activeTab, setActiveTab] = useState<'All' | 'Expected' | 'In Transit' | 'Received' | 'Cancelled'>('Received');
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,14 +28,20 @@ export const DeliveriesPage: React.FC = () => {
 
   // New Delivery Form State
   const [newDlv, setNewDlv] = useState({
-    supplier: 'ABC Traders',
-    site: 'Site Alpha',
-    material: 'Cement',
-    expectedQty: '200',
-    receivedQty: '200',
+    supplier: '',
+    site: sites[0]?.name || '',
+    material: '',
+    expectedQty: '',
+    receivedQty: '',
     unit: 'Bags',
     status: 'Received' as 'Expected' | 'In Transit' | 'Received' | 'Cancelled',
   });
+
+  React.useEffect(() => {
+    if (!newDlv.site && sites.length > 0) {
+      setNewDlv((prev) => ({ ...prev, site: sites[0].name }));
+    }
+  }, [sites, newDlv.site]);
 
   const query = searchTerm || globalSearch;
   const filteredDeliveries = deliveries.filter((d) => {
@@ -48,15 +56,25 @@ export const DeliveriesPage: React.FC = () => {
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newDlv.supplier || !newDlv.site || !newDlv.material) return;
     recordDelivery({
-      deliveryId: `DLV-00${Math.floor(45 + Math.random() * 50)}`,
-      supplier: newDlv.supplier,
+      deliveryId: `DLV-${Date.now().toString().slice(-4)}`,
+      supplier: newDlv.supplier.trim(),
       site: newDlv.site,
-      material: newDlv.material,
+      material: newDlv.material.trim(),
       expectedQty: parseFloat(newDlv.expectedQty) || 0,
       receivedQty: parseFloat(newDlv.receivedQty) || 0,
       unit: newDlv.unit,
       status: newDlv.status,
+    });
+    setNewDlv({
+      supplier: '',
+      site: sites[0]?.name || '',
+      material: '',
+      expectedQty: '',
+      receivedQty: '',
+      unit: 'Bags',
+      status: 'Received',
     });
     setShowAddModal(false);
   };
@@ -71,13 +89,13 @@ export const DeliveriesPage: React.FC = () => {
             Track consignments, dispatch statuses, and delivery verification
           </p>
         </div>
-        <button
+        <Button
+          variant="brand"
+          icon={<Plus className="w-4 h-4" />}
           onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white text-xs font-bold rounded-lg shadow-sm transition-all"
         >
-          <Plus className="w-4 h-4" />
-          <span>Record Delivery</span>
-        </button>
+          Record Delivery
+        </Button>
       </div>
 
       {/* Main Table Card */}
@@ -135,51 +153,71 @@ export const DeliveriesPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredDeliveries.map((dlv) => (
-                <tr key={dlv.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                    {dlv.deliveryId}
-                  </td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-800">{dlv.supplier}</td>
-                  <td className="py-3.5 px-4 text-slate-700 font-medium">{dlv.site}</td>
-                  <td className="py-3.5 px-4 text-slate-700 font-medium">{dlv.material}</td>
-                  <td className="py-3.5 px-4 text-slate-600">
-                    {dlv.expectedQty} {dlv.unit}
-                  </td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">
-                    {dlv.receivedQty} {dlv.unit}
-                    {dlv.shortage && (
-                      <span className="ml-1.5 text-[10px] text-rose-600 font-semibold">
-                        (-{dlv.shortage})
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        dlv.status === 'Received'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : dlv.status === 'In Transit'
-                          ? 'bg-blue-50 text-blue-700'
-                          : dlv.status === 'Expected'
-                          ? 'bg-amber-50 text-amber-700'
-                          : 'bg-rose-50 text-rose-700'
-                      }`}
-                    >
-                      {dlv.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <button
-                      onClick={() => setSelectedDelivery(dlv)}
-                      className="p-1.5 rounded-md text-slate-400 hover:text-[#0D5C3A] hover:bg-emerald-50 transition-colors"
-                      title="View Delivery Details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
+              {filteredDeliveries.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 px-4">
+                    <EmptyState
+                      variant="dashed"
+                      title="No Deliveries Found"
+                      description={
+                        query
+                          ? `No deliveries match "${query}". Try adjusting your filters or search keywords.`
+                          : activeTab !== 'All'
+                          ? `There are currently no deliveries with status "${activeTab}".`
+                          : 'No consignments or delivery records have been added yet.'
+                      }
+                      actionLabel="Record Delivery"
+                      onAction={() => setShowAddModal(true)}
+                    />
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredDeliveries.map((dlv) => (
+                  <tr key={dlv.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                      {dlv.deliveryId}
+                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-slate-800">{dlv.supplier}</td>
+                    <td className="py-3.5 px-4 text-slate-700 font-medium">{dlv.site}</td>
+                    <td className="py-3.5 px-4 text-slate-700 font-medium">{dlv.material}</td>
+                    <td className="py-3.5 px-4 text-slate-600">
+                      {dlv.expectedQty} {dlv.unit}
+                    </td>
+                    <td className="py-3.5 px-4 font-bold text-slate-900">
+                      {dlv.receivedQty} {dlv.unit}
+                      {dlv.shortage && (
+                        <span className="ml-1.5 text-[10px] text-rose-600 font-semibold">
+                          (-{dlv.shortage})
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          dlv.status === 'Received'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : dlv.status === 'In Transit'
+                            ? 'bg-blue-50 text-blue-700'
+                            : dlv.status === 'Expected'
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-rose-50 text-rose-700'
+                        }`}
+                      >
+                        {dlv.status}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => setSelectedDelivery(dlv)}
+                        className="p-1.5 rounded-md text-slate-400 hover:text-[#0D5C3A] hover:bg-emerald-50 transition-colors"
+                        title="View Delivery Details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -259,37 +297,34 @@ export const DeliveriesPage: React.FC = () => {
               )}
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-400 font-medium">Invoice No.</span>
-                <span className="font-mono text-slate-800">{selectedDelivery.invoiceNo || 'INV-2025-00123'}</span>
+                <span className="font-mono text-slate-800">{selectedDelivery.invoiceNo || 'N/A'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-400 font-medium">Received On</span>
-                <span className="text-slate-700">{selectedDelivery.receivedOn || '28 May 2025, 10:42 AM'}</span>
+                <span className="text-slate-700">{selectedDelivery.receivedOn || 'Recent'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-400 font-medium">Received By</span>
-                <span className="text-slate-700">{selectedDelivery.receivedBy || 'Rajesh Kumar'}</span>
+                <span className="text-slate-700">{selectedDelivery.receivedBy || 'Site Engineer'}</span>
               </div>
 
               {/* Photos Gallery */}
               <div className="pt-2">
                 <span className="text-slate-400 block text-[11px] mb-2 font-medium">Delivery Proof Photos</span>
-                <div className="grid grid-cols-3 gap-2">
-                  <img
-                    src="https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=300&auto=format&fit=crop&q=80"
-                    alt="Proof 1"
-                    className="rounded-lg border border-slate-200 aspect-square object-cover"
-                  />
-                  <img
-                    src="https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=300&auto=format&fit=crop&q=80"
-                    alt="Proof 2"
-                    className="rounded-lg border border-slate-200 aspect-square object-cover"
-                  />
-                  <img
-                    src="https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=300&auto=format&fit=crop&q=80"
-                    alt="Proof 3"
-                    className="rounded-lg border border-slate-200 aspect-square object-cover"
-                  />
-                </div>
+                {selectedDelivery.photos && selectedDelivery.photos.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedDelivery.photos.map((p, idx) => (
+                      <img
+                        key={idx}
+                        src={p}
+                        alt={`Proof ${idx + 1}`}
+                        className="rounded-lg border border-slate-200 aspect-square object-cover"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-400 italic text-[11px]">No delivery proof photos attached.</p>
+                )}
               </div>
             </div>
 
@@ -339,9 +374,9 @@ export const DeliveriesPage: React.FC = () => {
                     onChange={(e) => setNewDlv({ ...newDlv, site: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
                   >
-                    {sitesList.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name}
                       </option>
                     ))}
                   </select>
@@ -390,19 +425,21 @@ export const DeliveriesPage: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-semibold"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white font-bold rounded-lg shadow-sm"
+                  variant="brand"
+                  size="sm"
                 >
                   Save Delivery
-                </button>
+                </Button>
               </div>
             </form>
           </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useDashboardContext } from '../context/DashboardContext';
 import {
   MapPin,
@@ -25,67 +26,27 @@ interface MapPinPoint {
 }
 
 export const SiteMapViewPage: React.FC = () => {
-  const { sitesList } = useDashboardContext();
+  const { sites, sitesList } = useDashboardContext();
   const [selectedSite, setSelectedSite] = useState('All Sites');
   const [activePin, setActivePin] = useState<MapPinPoint | null>(null);
 
-  const pins: MapPinPoint[] = [
-    {
-      id: 'pin-1',
-      name: 'Site Alpha (Chennai)',
-      code: 'RBL-S-001',
-      x: 35,
-      y: 38,
-      type: 'normal',
-      statusLabel: 'Normal',
-      color: '#16A34A',
-      desc: 'Active construction, 32 materials, stock value ₹8.24L',
-    },
-    {
-      id: 'pin-2',
-      name: 'Site Beta (Coimbatore)',
-      code: 'RBL-S-002',
-      x: 65,
-      y: 42,
-      type: 'low',
-      statusLabel: 'Low Alert',
-      color: '#2563EB',
-      desc: 'Steel rod stock reorder pending, delivery expected today',
-    },
-    {
-      id: 'pin-3',
-      name: 'Site Gamma (Madurai)',
-      code: 'RBL-S-003',
-      x: 48,
-      y: 22,
-      type: 'high',
-      statusLabel: 'High Alert',
-      color: '#DC2626',
-      desc: 'Critical low sand buffer; plastering suspended until arrival',
-    },
-    {
-      id: 'pin-4',
-      name: 'Site Delta (Trichy)',
-      code: 'RBL-S-004',
-      x: 22,
-      y: 72,
-      type: 'medium',
-      statusLabel: 'Medium Alert',
-      color: '#EA580C',
-      desc: 'Bricks batch inspection required before clearance',
-    },
-    {
-      id: 'pin-5',
-      name: 'Surveillance Drone #04',
-      code: 'DRN-TN-04',
-      x: 38,
-      y: 78,
-      type: 'drone',
-      statusLabel: 'Drone Location',
-      color: '#7C3AED',
-      desc: 'Active aerial site mapping over Chennai zone (Altitude: 120m)',
-    },
-  ];
+  const pins: MapPinPoint[] = sites
+    .filter((s) => selectedSite === 'All Sites' || s.name === selectedSite)
+    .map((s, idx) => {
+      const x = 20 + ((idx * 27) % 60);
+      const y = 25 + ((idx * 31) % 55);
+      return {
+        id: s.id,
+        name: `${s.name} (${s.location})`,
+        code: s.code,
+        x,
+        y,
+        type: s.status === 'Active' ? 'normal' : 'low',
+        statusLabel: s.status,
+        color: s.status === 'Active' ? '#16A34A' : '#F59E0B',
+        desc: `${s.location} • ${s.totalMaterials} materials • stock value ${s.stockValueFormatted || '₹0'}`,
+      };
+    });
 
   return (
     <div className="space-y-5">
@@ -176,6 +137,24 @@ export const SiteMapViewPage: React.FC = () => {
             </span>
           </div>
         ))}
+
+        {pins.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-auto z-20">
+            <div className="bg-slate-900/90 backdrop-blur-md text-white p-6 rounded-2xl text-center space-y-3 shadow-2xl border border-white/10 max-w-sm">
+              <Building2 className="w-8 h-8 text-emerald-400 mx-auto" />
+              <h4 className="font-bold text-sm">No Project Sites to Map</h4>
+              <p className="text-xs text-slate-300">
+                Add your project locations to display live GIS coordinates, satellite telemetry, and site pins.
+              </p>
+              <Link
+                to="/sites"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0D5C3A] text-white rounded-lg text-xs font-bold hover:bg-[#094228] transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Project Site
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Selected Pin Info Card (if clicked) */}
         {activePin && (
