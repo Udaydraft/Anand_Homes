@@ -202,10 +202,11 @@ async def api_health() -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Include API Routers
+# Include API Routers (Mount with /api and root prefix for backwards compatibility)
 # ---------------------------------------------------------------------------
-app.include_router(auth_router, prefix="/api")
-app.include_router(users_router, prefix="/api")
-app.include_router(properties_router, prefix="/api")
-app.include_router(construction_router, prefix="/api")
-app.include_router(database_status_router, prefix="/api")
+for prefix in ["/api", ""]:
+    app.include_router(auth_router, prefix=prefix)
+    app.include_router(users_router, prefix=prefix)
+    app.include_router(properties_router, prefix=prefix)
+    app.include_router(construction_router, prefix=prefix)
+    app.include_router(database_status_router, prefix=prefix)

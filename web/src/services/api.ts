@@ -1,7 +1,20 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { ApiResponse } from '@project/shared';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
+export const getApiBaseUrl = (url: string): string => {
+  if (!url) return '/api';
+  const clean = url.replace(/\/+$/, '');
+  if (clean.endsWith('/api')) {
+    return clean;
+  }
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    return `${clean}/api`;
+  }
+  return clean;
+};
+
+const API_BASE_URL = getApiBaseUrl(rawApiUrl);
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
