@@ -1,37 +1,32 @@
 import React from 'react';
-import { Outlet, Link } from 'react-router-dom';
-import { Layers } from 'lucide-react';
+import { Outlet } from 'react-router-dom';
+import { AnandHomesLogo } from '../components/AnandHomesLogo';
 
 export const AuthLayout: React.FC = () => {
   return (
-    <div className="min-h-screen bg-background relative flex flex-col justify-center items-center px-4 py-12 selection:bg-indigo-500 selection:text-white">
-      {/* Ambient background glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[#072417] flex flex-col justify-between items-center relative overflow-hidden px-4 py-8 selection:bg-emerald-500 selection:text-white">
+      {/* Background Decorative Construction Silhouette & Gradients */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A3925] via-[#072417] to-[#04160E] pointer-events-none" />
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Brand Header */}
-      <div className="mb-8 flex flex-col items-center text-center relative z-10">
-        <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 group-hover:scale-105 transition-transform duration-200">
-            <Layers className="w-6 h-6" />
-          </div>
-          <span className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-            AntiGravity
-          </span>
-        </Link>
-        <p className="text-sm text-slate-400 mt-2">Unified Web + Mobile Architecture</p>
+      {/* Top Logo */}
+      <div className="relative z-10 pt-4 pb-2">
+        <AnandHomesLogo />
       </div>
 
       {/* Auth Card Container */}
-      <div className="w-full max-w-md relative z-10">
-        <div className="glass-panel rounded-2xl p-8 shadow-2xl border border-white/10">
+      <div className="w-full max-w-sm relative z-10 my-auto">
+        <div className="bg-white rounded-2xl p-6 sm:p-7 shadow-2xl border border-slate-100/20">
           <Outlet />
         </div>
       </div>
 
-      {/* Footer info */}
-      <div className="mt-8 text-center text-xs text-slate-500 relative z-10">
-        Connected to FastAPI Backend &bull; MongoDB Atlas Ready
+      {/* Bottom Construction Skyline Illustration / Footer */}
+      <div className="w-full max-w-xl text-center relative z-10 pt-4 pb-2">
+        <p className="text-[11px] text-emerald-200/50 font-medium">
+          Anand Homes ERP &bull; Construction &bull; Inventory &bull; Logistics
+        </p>
       </div>
     </div>
   );

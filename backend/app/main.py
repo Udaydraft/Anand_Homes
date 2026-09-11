@@ -7,10 +7,13 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pymongo.errors import PyMongoError
 from app.api.auth import router as auth_router
+from app.api.construction import router as construction_router
 from app.api.users import router as users_router
 from app.core.config import get_settings
 from app.database.mongodb import db_manager
+from app.services.construction_service import ConstructionService
 
 # ---------------------------------------------------------------------------
 # Structured Logging Setup
@@ -33,6 +36,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application startup and clean database connection shutdown."""
     logger.info("Starting up %s (version: %s)...", settings.PROJECT_NAME, settings.VERSION)
     await db_manager.connect()
+    if db_manager.is_connected and db_manager.db is not None:
+        try:
+            construction_svc = ConstructionService(db_manager.db)
+            await construction_svc.seed_database_if_empty()
+        except Exception as exc:
+            logger.warning("Error running auto-seed on startup: %s", exc)
     yield
     logger.info("Shutting down %s...", settings.PROJECT_NAME)
     await db_manager.close()
@@ -110,6 +119,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
+@app.exception_handler(PyMongoError)
+async def pymongo_exception_handler(request: Request, exc: PyMongoError):
+    logger.error("Database error or timeout: %s", str(exc))
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "success": False,
+            "message": "Database connection error. Please ensure MongoDB is running or configure MONGODB_URL in backend/.env.",
+            "detail": "MongoDB unavailable or connection timeout",
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled server exception: %s", str(exc), exc_info=True)
@@ -174,3 +196,4 @@ async def api_health() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(construction_router, prefix="/api")

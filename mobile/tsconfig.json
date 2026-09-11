@@ -2,7 +2,9 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020"
+    ],
     "jsx": "react-native",
     "moduleResolution": "bundler",
     "strict": true,
@@ -11,11 +13,23 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "types": ["node"],
     "paths": {
-      "@/*": ["src/*"],
-      "@project/shared": ["../packages/shared/index.ts"],
-      "@project/shared/*": ["../packages/shared/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@project/shared": [
+        "../packages/shared/index.ts"
+      ],
+      "@project/shared/*": [
+        "../packages/shared/*"
+      ]
     }
   },
-  "include": ["src", "App.tsx"]
+  "include": [
+    "src",
+    "App.tsx"
+  ],
+  "extends": "expo/tsconfig.base"
 }

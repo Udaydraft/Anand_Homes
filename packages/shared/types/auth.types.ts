@@ -9,7 +9,9 @@ export interface RegisterPayload {
   name: string;
   email: string;
   password: string;
+  role?: string;
 }
+
 
 export interface RefreshTokenPayload {
   refresh_token: string;

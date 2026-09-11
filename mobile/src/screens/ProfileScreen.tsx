@@ -1,223 +1,205 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
+  TouchableOpacity,
+  SafeAreaView,
+  Image,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import { useMobileData } from '../context/MobileDataContext';
 import { useAuth } from '../hooks/useAuth';
-import { userService } from '../services/user.service';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
-import { Input } from '../components/Input';
+import { Ionicons } from '@expo/vector-icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, refreshProfile } = useAuth();
-  const [name, setName] = useState(user?.name || '');
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { roleMode, toggleRole, selectedSite } = useMobileData();
+  const { logout } = useAuth();
 
-  const handleUpdate = async () => {
-    setMessage(null);
-    setError(null);
+  const name = roleMode === 'admin' ? 'Admin User' : 'Rajesh Kumar';
+  const roleTitle = roleMode === 'admin' ? 'Super Admin' : 'Supervisor';
+  const avatarUrl =
+    roleMode === 'admin'
+      ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'
+      : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80';
 
-    if (name.trim().length < 2) {
-      setError('Name must be at least 2 characters.');
-      return;
-    }
-
-    setIsUpdating(true);
-    try {
-      await userService.updateProfile({ name: name.trim() });
-      await refreshProfile();
-      setMessage('Profile updated successfully!');
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to update profile.';
-      setError(msg);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
+  const menuItems = [
+    { title: 'Personal Information', icon: 'person-outline' as const },
+    { title: 'Change Password', icon: 'lock-closed-outline' as const },
+    { title: 'Notification Settings', icon: 'notifications-outline' as const },
+    { title: 'Help & Support', icon: 'help-circle-outline' as const },
+    { title: 'About App', icon: 'information-circle-outline' as const },
+  ];
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Avatar Card */}
-        <View style={styles.avatarCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={20} color="#1E293B" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Profile</Text>
+        <TouchableOpacity>
+          <Ionicons name="notifications-outline" size={20} color="#1E293B" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content}>
+        {/* User Card */}
+        <View style={styles.userCard}>
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+          <Text style={styles.name}>{name}</Text>
+          <Text style={styles.roleSub}>
+            {roleTitle} {roleMode === 'supervisor' && `• ${selectedSite}`}
+          </Text>
+
+          <TouchableOpacity style={styles.switchRoleBtn} onPress={toggleRole}>
+            <Ionicons name="sync" size={14} color="#0D5C3A" />
+            <Text style={styles.switchRoleText}>
+              Switch to {roleMode === 'admin' ? 'Supervisor Mode' : 'Admin Mode'}
             </Text>
-          </View>
-          <Text style={styles.userName}>{user?.name}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>{user?.role || 'user'}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
-        {message && (
-          <View style={styles.successBanner}>
-            <Text style={styles.successText}>{message}</Text>
-          </View>
-        )}
+        {/* Menu Items */}
+        <View style={styles.menuCard}>
+          {menuItems.map((item, idx) => (
+            <TouchableOpacity key={idx} style={styles.menuRow}>
+              <View style={styles.menuLeft}>
+                <Ionicons name={item.icon} size={18} color="#64748B" />
+                <Text style={styles.menuTitle}>{item.title}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
+            </TouchableOpacity>
+          ))}
+        </View>
 
-        {error && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-
-        <Card title="Edit Information" subtitle="Update your account details">
-          <Input
-            label="Full Name"
-            value={name}
-            onChangeText={setName}
-            placeholder="Your name"
-          />
-
-          <Input
-            label="Email Address"
-            value={user?.email || ''}
-            editable={false}
-            helperText="Email cannot be modified directly"
-          />
-
-          <Button
-            title="Save Profile"
-            onPress={handleUpdate}
-            isLoading={isUpdating}
-            style={{ marginTop: 8 }}
-          />
-        </Card>
-
-        <Card title="Account Security" subtitle="Authentication & Tokens">
-          <Text style={styles.infoText}>
-            Tokens are encrypted using hardware-backed keychains via Expo SecureStore.
-          </Text>
-          <View style={styles.idBox}>
-            <Text style={styles.idLabel}>Account ID:</Text>
-            <Text style={styles.idValue}>{user?.id}</Text>
-          </View>
-        </Card>
+        {/* Logout Button */}
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={() => {
+            logout();
+            navigation.navigate('Login');
+          }}
+        >
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F8FAFC',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  backBtn: {
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
   },
   content: {
-    padding: 20,
-    paddingBottom: 40,
+    flex: 1,
+    padding: 16,
   },
-  avatarCard: {
+  userCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 20,
     alignItems: 'center',
-    backgroundColor: '#111827',
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#E2E8F0',
+    marginBottom: 14,
   },
   avatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: '#4F46E5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: '#ECFDF5',
+    marginBottom: 8,
   },
-  avatarText: {
-    fontSize: 26,
+  name: {
+    fontSize: 16,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
-  userName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#F9FAFB',
-  },
-  userEmail: {
-    fontSize: 13,
-    color: '#9CA3AF',
+  roleSub: {
+    fontSize: 11,
+    color: '#64748B',
     marginTop: 2,
   },
-  roleBadge: {
-    marginTop: 10,
-    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+  switchRoleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ECFDF5',
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.3)',
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 12,
   },
-  roleText: {
+  switchRoleText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#A5B4FC',
-    textTransform: 'uppercase',
+    color: '#0D5C3A',
   },
-  successBanner: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+  menuCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    borderRadius: 10,
-    padding: 12,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
     marginBottom: 16,
   },
-  successText: {
-    color: '#34D399',
-    fontSize: 13,
-    textAlign: 'center',
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  errorBanner: {
-    backgroundColor: 'rgba(244, 63, 94, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(244, 63, 94, 0.3)',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
+  menuLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  errorText: {
-    color: '#FB7185',
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  infoText: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    lineHeight: 18,
-  },
-  idBox: {
-    marginTop: 12,
-    padding: 10,
-    backgroundColor: '#1F2937',
-    borderRadius: 8,
-  },
-  idLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '600',
-  },
-  idValue: {
+  menuTitle: {
     fontSize: 12,
-    color: '#D1D5DB',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    marginTop: 2,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  logoutBtn: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    marginBottom: 30,
+  },
+  logoutText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

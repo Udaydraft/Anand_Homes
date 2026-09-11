@@ -12,6 +12,7 @@
     "dev:backend": "cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
     "dev:web": "npm run dev --workspace=web",
     "dev:mobile": "npm run start --workspace=mobile",
+    "dev:mobile:tunnel": "npm run tunnel --workspace=mobile",
     "build:shared": "npm run build --workspace=packages/shared",
     "build:web": "npm run build --workspace=web",
     "test:backend": "cd backend && pytest -v"
