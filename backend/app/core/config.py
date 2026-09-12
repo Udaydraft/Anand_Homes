@@ -24,14 +24,30 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # CORS Configuration
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://localhost:8081"
+    CORS_ORIGINS: str = (
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://localhost:8081,"
+        "https://anand-homes-web.vercel.app,https://anand-homes.onrender.com"
+    )
+    CORS_ORIGIN_REGEX: str = r"^https:\/\/.*\.vercel\.app$|^https:\/\/.*\.onrender\.com$|^http:\/\/localhost(:\d+)?$|^http:\/\/127\.0\.0\.1(:\d+)?$|^https?:\/\/.*$"
 
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse comma-separated CORS origins into a trimmed list."""
-        if not self.CORS_ORIGINS:
+        if not self.CORS_ORIGINS or "*" in [o.strip() for o in self.CORS_ORIGINS.split(",")]:
             return ["*"]
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        defaults = [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:5173",
+            "http://localhost:8081",
+            "https://anand-homes-web.vercel.app",
+            "https://anand-homes.onrender.com",
+        ]
+        for d in defaults:
+            if d not in origins:
+                origins.append(d)
+        return origins
 
     model_config = SettingsConfigDict(
         env_file=".env",
