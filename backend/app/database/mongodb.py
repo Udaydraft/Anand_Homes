@@ -92,10 +92,6 @@ class MongoDBManager:
                 exc,
                 self.client_ip,
             )
-            # Re-raise or keep client uninitialized so that caller is explicitly aware
-            raise RuntimeError(
-                f"Failed to connect to MongoDB Atlas: {exc}. Please check your internet connection or Atlas Network Access."
-            ) from exc
 
     async def ensure_indexes(self) -> None:
         """Ensure necessary collections have correct indexes directly in MongoDB Atlas."""
@@ -170,7 +166,14 @@ class MongoDBManager:
 
     def get_db(self) -> AsyncIOMotorDatabase:
         if self.db is None:
-            raise RuntimeError("MongoDB Atlas database is not initialized. Please check connection.")
+            if self.client:
+                self.db = self.client[settings.DATABASE_NAME]
+                return self.db
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database service unavailable. Please check MongoDB Atlas connection.",
+            )
         return self.db
 
 

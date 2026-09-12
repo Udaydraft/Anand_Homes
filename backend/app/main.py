@@ -41,17 +41,26 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Application Lifespan (Startup & Shutdown)
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application startup and clean database connection shutdown."""
     logger.info("Starting up %s (version: %s)...", settings.PROJECT_NAME, settings.VERSION)
-    await db_manager.connect()
-    # Real database - no dummy data auto-seeding
+    try:
+        await db_manager.connect()
+    except Exception as exc:
+        logger.error(
+            "MongoDB Atlas connection failed during startup: %s. Application will continue running in degraded mode.",
+            exc,
+        )
     yield
     logger.info("Shutting down %s...", settings.PROJECT_NAME)
-    await db_manager.close()
+    try:
+        await db_manager.close()
+    except Exception as exc:
+        logger.warning("Error during database shutdown: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -70,34 +79,47 @@ app = FastAPI(
 # Mount Static Files for Uploads
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
-# ---------------------------------------------------------------------------
-# CORS Configuration
-# ---------------------------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
-
 
 # ---------------------------------------------------------------------------
 # Request Timing & Logging Middleware (Never logs sensitive tokens/passwords)
 # ---------------------------------------------------------------------------
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    # Pass through OPTIONS requests directly to ensure preflight is not blocked
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     start_time = time.time()
     path = request.url.path
     method = request.method
-    
+    origin = request.headers.get("origin")
+    logger.info("Request: %s %s Origin=%s", method, path, origin)
+
     response = await call_next(request)
-    
+
     duration = time.time() - start_time
     logger.info("%s %s completed in %.2f ms (Status: %d)", method, path, duration * 1000, response.status_code)
     return response
+
+
+# ---------------------------------------------------------------------------
+# CORS Configuration (Added after custom middleware so CORSMiddleware is outermost)
+# ---------------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=[
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+    ],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 
 # ---------------------------------------------------------------------------
