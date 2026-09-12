@@ -23,12 +23,15 @@ export const MaterialRequestsPage: React.FC = () => {
     roleMode,
     materialRequests,
     sites,
+    myAssignedSites,
     createMaterialRequest,
     approveRequest,
     rejectRequest,
     cancelRequest,
     globalSearch,
   } = useDashboardContext();
+
+  const availableSites = roleMode === 'supervisor' ? myAssignedSites : sites;
 
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('Pending');
   const [searchTerm, setSearchTerm] = useState('');
@@ -39,7 +42,7 @@ export const MaterialRequestsPage: React.FC = () => {
 
   // New Request Form State
   const [newReq, setNewReq] = useState({
-    site: sites[0]?.name || '',
+    site: availableSites[0]?.name || '',
     material: 'Cement',
     quantity: '',
     unit: 'Bags',
@@ -49,10 +52,10 @@ export const MaterialRequestsPage: React.FC = () => {
   });
 
   React.useEffect(() => {
-    if (!newReq.site && sites.length > 0) {
-      setNewReq((prev) => ({ ...prev, site: sites[0].name }));
+    if (!newReq.site && availableSites.length > 0) {
+      setNewReq((prev) => ({ ...prev, site: availableSites[0].name }));
     }
-  }, [sites, newReq.site]);
+  }, [availableSites, newReq.site]);
 
   const materials = ['Cement', 'Steel 12mm', 'Sand', 'Bricks', 'Paint', 'Gravel 20mm', 'Plywood', 'Rods 8mm'];
   const units = ['Bags', 'Ton', 'Loads', 'Nos', 'Boxes', 'Sheets'];
@@ -81,7 +84,7 @@ export const MaterialRequestsPage: React.FC = () => {
       notes: newReq.notes,
     });
     setNewReq({
-      site: sites[0]?.name || '',
+      site: availableSites[0]?.name || '',
       material: 'Cement',
       quantity: '',
       unit: 'Bags',
@@ -384,17 +387,23 @@ export const MaterialRequestsPage: React.FC = () => {
             <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Site *</label>
-                <select
-                  value={newReq.site}
-                  onChange={(e) => setNewReq({ ...newReq, site: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
-                >
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.name}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                {availableSites.length === 0 ? (
+                  <p className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
+                    No assigned construction sites found. You must be assigned to a site by an Admin before requesting materials.
+                  </p>
+                ) : (
+                  <select
+                    value={newReq.site}
+                    onChange={(e) => setNewReq({ ...newReq, site: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
+                  >
+                    {availableSites.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>

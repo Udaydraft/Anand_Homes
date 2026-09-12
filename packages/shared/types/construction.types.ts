@@ -6,6 +6,8 @@ export interface Site {
   name: string;
   location: string;
   supervisor: string;
+  supervisorId?: string;
+  supervisorEmail?: string;
   status: 'Active' | 'Inactive';
   totalMaterials: number;
   stockValue: number;

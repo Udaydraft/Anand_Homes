@@ -9,6 +9,8 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 from app.database.mongodb import get_database
+from app.dependencies.auth import get_optional_user
+from app.models.user import UserModel
 from app.schemas.construction import (
     ActivityResponse,
     DashboardSummaryResponse,
@@ -36,13 +38,40 @@ from app.services.construction_service import ConstructionService
 router = APIRouter(tags=["Construction Management"])
 
 
+async def _resolve_allowed_sites(
+    service: ConstructionService,
+    current_user: Optional[UserModel],
+) -> Optional[List[str]]:
+    """Determine allowed site names for scoped access based on supervisor role."""
+    if current_user and current_user.role == "supervisor":
+        return await service.get_supervisor_site_names(current_user)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Sites
 # ---------------------------------------------------------------------------
 @router.get("/sites", response_model=ApiResponse[List[SiteResponse]])
-async def list_sites(db: AsyncIOMotorDatabase = Depends(get_database)):
+async def list_sites(
+    supervisor: Optional[str] = Query(None, description="Filter sites by supervisor name, email, or ID"),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     service = ConstructionService(db)
-    sites = await service.list_sites()
+    target_supervisor = supervisor
+    supervisor_id = None
+    supervisor_email = None
+
+    if current_user and current_user.role == "supervisor" and not target_supervisor:
+        supervisor_id = str(current_user.id)
+        supervisor_email = current_user.email
+        target_supervisor = current_user.name
+
+    sites = await service.list_sites(
+        supervisor=target_supervisor,
+        supervisor_id=supervisor_id,
+        supervisor_email=supervisor_email,
+    )
     return ApiResponse(success=True, message="Sites retrieved successfully", data=sites)
 
 
@@ -88,20 +117,24 @@ async def delete_site(site_id: str, db: AsyncIOMotorDatabase = Depends(get_datab
 @router.get("/inventory", response_model=ApiResponse[List[InventoryResponse]])
 async def list_inventory(
     site: Optional[str] = Query(None, description="Filter inventory by site name"),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    items = await service.list_inventory(site)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    items = await service.list_inventory(site, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Inventory retrieved successfully", data=items)
 
 
 @router.get("/inventory/low-stock", response_model=ApiResponse[List[Dict[str, Any]]])
 async def get_low_stock(
     site: Optional[str] = Query(None, description="Filter low stock by site name"),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    alerts = await service.get_low_stock(site)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    alerts = await service.get_low_stock(site, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Low stock alerts retrieved", data=alerts)
 
 
@@ -153,13 +186,17 @@ async def stock_out(payload: StockOutRequest, db: AsyncIOMotorDatabase = Depends
 
 @router.get("/stock/transactions", response_model=ApiResponse[List[StockTransactionResponse]])
 async def list_stock_transactions(
-    site: Optional[str] = Query(None), db: AsyncIOMotorDatabase = Depends(get_database)
+    site: Optional[str] = Query(None),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    txs = await service.list_transactions(site)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    txs = await service.list_transactions(site, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Transactions retrieved", data=txs)
 
 
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Material Requests
 # ---------------------------------------------------------------------------
@@ -167,10 +204,12 @@ async def list_stock_transactions(
 async def list_requests(
     site: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    reqs = await service.list_requests(site, status)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    reqs = await service.list_requests(site, status, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Material requests retrieved", data=reqs)
 
 
@@ -208,10 +247,13 @@ async def delete_request(request_id: str, db: AsyncIOMotorDatabase = Depends(get
 # ---------------------------------------------------------------------------
 @router.get("/deliveries", response_model=ApiResponse[List[DeliveryResponse]])
 async def list_deliveries(
-    site: Optional[str] = Query(None), db: AsyncIOMotorDatabase = Depends(get_database)
+    site: Optional[str] = Query(None),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    delivs = await service.list_deliveries(site)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    delivs = await service.list_deliveries(site, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Deliveries retrieved", data=delivs)
 
 
@@ -251,10 +293,12 @@ async def delete_delivery(delivery_id: str, db: AsyncIOMotorDatabase = Depends(g
 async def list_photos(
     site: Optional[str] = Query(None),
     type: Optional[str] = Query(None),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    photos = await service.list_photos(site, type)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    photos = await service.list_photos(site, type, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Photos retrieved", data=photos)
 
 
@@ -311,19 +355,24 @@ async def delete_photo(photo_id: str, db: AsyncIOMotorDatabase = Depends(get_dat
 async def list_activities(
     site: Optional[str] = Query(None),
     limit: int = Query(20, ge=1, le=100),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    acts = await service.list_activities(site, limit)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    acts = await service.list_activities(site, limit, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Activities retrieved", data=acts)
 
 
 @router.get("/dashboard/summary", response_model=ApiResponse[DashboardSummaryResponse])
 async def get_dashboard_summary(
-    site: Optional[str] = Query(None), db: AsyncIOMotorDatabase = Depends(get_database)
+    site: Optional[str] = Query(None),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    summary = await service.get_dashboard_summary(site)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    summary = await service.get_dashboard_summary(site, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Dashboard summary retrieved", data=summary)
 
 

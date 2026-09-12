@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -83,14 +84,58 @@ class ConstructionService:
     # -----------------------------------------------------------------------
     # Sites CRUD
     # -----------------------------------------------------------------------
-    async def list_sites(self) -> List[SiteResponse]:
-        cursor = self.sites.find({})
+    async def list_sites(
+        self,
+        supervisor: Optional[str] = None,
+        supervisor_id: Optional[str] = None,
+        supervisor_email: Optional[str] = None,
+    ) -> List[SiteResponse]:
+        query: Dict[str, Any] = {}
+        or_clauses: List[Dict[str, Any]] = []
+
+        if supervisor_id:
+            or_clauses.append({"supervisorId": supervisor_id})
+        if supervisor_email:
+            or_clauses.append({"supervisorEmail": {"$regex": f"^{re.escape(supervisor_email)}$", "$options": "i"}})
+        if supervisor:
+            or_clauses.append({"supervisor": {"$regex": f"^{re.escape(supervisor)}$", "$options": "i"}})
+            or_clauses.append({"supervisorEmail": {"$regex": f"^{re.escape(supervisor)}$", "$options": "i"}})
+            or_clauses.append({"supervisorId": supervisor})
+
+        if or_clauses:
+            query["$or"] = or_clauses
+
+        cursor = self.sites.find(query)
         items = []
         async for doc in cursor:
             res = self._doc_to_res(doc)
             if res:
                 items.append(SiteResponse(**res))
         return items
+
+    async def get_supervisor_site_names(self, supervisor_user: Any) -> List[str]:
+        """Find names of all project sites assigned to a specific supervisor."""
+        or_clauses = []
+        user_id = str(getattr(supervisor_user, "id", ""))
+        user_email = getattr(supervisor_user, "email", "")
+        user_name = getattr(supervisor_user, "name", "")
+
+        if user_id:
+            or_clauses.append({"supervisorId": user_id})
+        if user_email:
+            or_clauses.append({"supervisorEmail": {"$regex": f"^{re.escape(user_email)}$", "$options": "i"}})
+        if user_name:
+            or_clauses.append({"supervisor": {"$regex": f"^{re.escape(user_name)}$", "$options": "i"}})
+
+        if not or_clauses:
+            return []
+
+        cursor = self.sites.find({"$or": or_clauses})
+        names = []
+        async for doc in cursor:
+            if doc.get("name"):
+                names.append(doc["name"])
+        return names
 
     async def get_site(self, site_id: str) -> Optional[SiteResponse]:
         doc = await self.sites.find_one({"$or": [{"id": site_id}, {"_id": site_id}]})
@@ -142,10 +187,31 @@ class ConstructionService:
     # -----------------------------------------------------------------------
     # Inventory CRUD
     # -----------------------------------------------------------------------
-    async def list_inventory(self, site: Optional[str] = None) -> List[InventoryResponse]:
-        query = {}
-        if site and site.lower() != "all":
+    @staticmethod
+    def _apply_site_filter(
+        query: Dict[str, Any], site: Optional[str], allowed_sites: Optional[List[str]]
+    ) -> bool:
+        """Helper to apply site/allowed_sites scoping. Returns False if query should return empty set immediately."""
+        if allowed_sites is not None:
+            if not allowed_sites:
+                return False
+            if site and site.lower() != "all":
+                if site in allowed_sites:
+                    query["site"] = site
+                else:
+                    return False
+            else:
+                query["site"] = {"$in": allowed_sites}
+        elif site and site.lower() != "all":
             query["site"] = site
+        return True
+
+    async def list_inventory(
+        self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
+    ) -> List[InventoryResponse]:
+        query: Dict[str, Any] = {}
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
 
         cursor = self.inventory.find(query)
         items = []
@@ -193,10 +259,12 @@ class ConstructionService:
         res = await self.inventory.delete_one({"$or": [{"id": item_id}, {"_id": item_id}]})
         return res.deleted_count > 0
 
-    async def get_low_stock(self, site: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_low_stock(
+        self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         query: Dict[str, Any] = {"status": {"$in": ["Low", "Out of Stock"]}}
-        if site and site.lower() != "all":
-            query["site"] = site
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
 
         cursor = self.inventory.find(query)
         alerts = []
@@ -322,10 +390,12 @@ class ConstructionService:
         await self._persist()
         return StockTransactionResponse(**self._doc_to_res(tx_doc))
 
-    async def list_transactions(self, site: Optional[str] = None) -> List[StockTransactionResponse]:
+    async def list_transactions(
+        self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
+    ) -> List[StockTransactionResponse]:
         query = {}
-        if site and site.lower() != "all":
-            query["site"] = site
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
         cursor = self.stock_transactions.find(query).sort("_id", -1)
         items = []
         async for doc in cursor:
@@ -338,11 +408,14 @@ class ConstructionService:
     # Material Requests
     # -----------------------------------------------------------------------
     async def list_requests(
-        self, site: Optional[str] = None, status: Optional[str] = None
+        self,
+        site: Optional[str] = None,
+        status: Optional[str] = None,
+        allowed_sites: Optional[List[str]] = None,
     ) -> List[MaterialRequestResponse]:
         query = {}
-        if site and site.lower() != "all":
-            query["site"] = site
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
         if status:
             query["status"] = status
 
@@ -407,10 +480,12 @@ class ConstructionService:
     # -----------------------------------------------------------------------
     # Deliveries
     # -----------------------------------------------------------------------
-    async def list_deliveries(self, site: Optional[str] = None) -> List[DeliveryResponse]:
+    async def list_deliveries(
+        self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
+    ) -> List[DeliveryResponse]:
         query = {}
-        if site and site.lower() != "all":
-            query["site"] = site
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
 
         cursor = self.deliveries.find(query).sort("_id", -1)
         items = []
@@ -467,10 +542,15 @@ class ConstructionService:
     # -----------------------------------------------------------------------
     # Photos
     # -----------------------------------------------------------------------
-    async def list_photos(self, site: Optional[str] = None, photo_type: Optional[str] = None) -> List[SitePhotoResponse]:
+    async def list_photos(
+        self,
+        site: Optional[str] = None,
+        photo_type: Optional[str] = None,
+        allowed_sites: Optional[List[str]] = None,
+    ) -> List[SitePhotoResponse]:
         query = {}
-        if site and site.lower() != "all":
-            query["site"] = site
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
         if photo_type:
             query["type"] = photo_type
 
@@ -527,10 +607,15 @@ class ConstructionService:
         except Exception as exc:
             logger.warning("Could not log activity: %s", exc)
 
-    async def list_activities(self, site: Optional[str] = None, limit: int = 20) -> List[ActivityResponse]:
+    async def list_activities(
+        self,
+        site: Optional[str] = None,
+        limit: int = 20,
+        allowed_sites: Optional[List[str]] = None,
+    ) -> List[ActivityResponse]:
         query = {}
-        if site and site.lower() != "all":
-            query["site"] = site
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
 
         cursor = self.activities.find(query).sort("_id", -1).limit(limit)
         items = []
@@ -540,14 +625,19 @@ class ConstructionService:
                 items.append(ActivityResponse(**res))
         return items
 
-    async def get_dashboard_summary(self, site: Optional[str] = None) -> DashboardSummaryResponse:
+    async def get_dashboard_summary(
+        self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
+    ) -> DashboardSummaryResponse:
         # Sites
         sites_list = await self.list_sites()
+        if allowed_sites is not None:
+            sites_list = [s for s in sites_list if s.name in allowed_sites]
+
         total_sites = len(sites_list)
         active_sites = sum(1 for s in sites_list if s.status == "Active")
 
         # Inventory
-        inv_items = await self.list_inventory(site)
+        inv_items = await self.list_inventory(site, allowed_sites=allowed_sites)
         total_materials = len(inv_items)
         low_stock_count = sum(1 for i in inv_items if i.status == "Low")
         critical_count = sum(1 for i in inv_items if i.status == "Out of Stock")
@@ -556,12 +646,14 @@ class ConstructionService:
         total_value = sum(s.stockValue for s in sites_list)
 
         # Requests & Deliveries
-        pending_requests = await self.requests.count_documents(
-            {"status": "Pending", **({"site": site} if site and site.lower() != "all" else {})}
-        )
-        active_deliveries = await self.deliveries.count_documents(
-            {"status": {"$in": ["Expected", "In Transit"]}, **({"site": site} if site and site.lower() != "all" else {})}
-        )
+        req_query: Dict[str, Any] = {"status": "Pending"}
+        deliv_query: Dict[str, Any] = {"status": {"$in": ["Expected", "In Transit"]}}
+
+        has_reqs = self._apply_site_filter(req_query, site, allowed_sites)
+        has_delivs = self._apply_site_filter(deliv_query, site, allowed_sites)
+
+        pending_requests = await self.requests.count_documents(req_query) if has_reqs else 0
+        active_deliveries = await self.deliveries.count_documents(deliv_query) if has_delivs else 0
 
         return DashboardSummaryResponse(
             totalSites=total_sites,

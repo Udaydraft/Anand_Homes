@@ -39,39 +39,41 @@ export const SupervisorDashboard: React.FC = () => {
     selectedSite,
     setSelectedSite,
     sitesList,
+    myAssignedSites,
+    refreshData,
     isLoadingData,
   } = useDashboardContext();
 
   const supervisorName = user?.name || 'User_Name';
 
-  // Determine active assigned site (filter by supervisor name, or selectedSite, or fallback to first site)
+  // Determine active assigned site strictly from supervisor's assigned sites (NO sites[0] auto-assign)
   const myAssignedSite =
-    sites.find((s) => s.name === selectedSite) ||
-    sites.find((s) => s.supervisor.toLowerCase().includes(supervisorName.toLowerCase().split(' ')[0])) ||
-    sites[0];
+    myAssignedSites.find((s) => s.name === selectedSite) ||
+    myAssignedSites[0] ||
+    null;
 
-  const siteName = myAssignedSite?.name || 'All Sites';
+  const siteName = myAssignedSite ? myAssignedSite.name : '';
 
-  // Filter metrics specifically for this site
-  const siteInventory = siteName === 'All Sites' 
-    ? inventory 
-    : inventory.filter((i) => i.site === siteName);
+  // Filter metrics strictly for this assigned site; if no site is assigned, keep arrays empty
+  const siteInventory = siteName
+    ? inventory.filter((i) => i.site === siteName)
+    : [];
 
-  const siteAlerts = siteName === 'All Sites'
-    ? lowStockAlerts
-    : lowStockAlerts.filter((a) => a.site === siteName);
+  const siteAlerts = siteName
+    ? lowStockAlerts.filter((a) => a.site === siteName)
+    : [];
 
-  const siteDeliveries = siteName === 'All Sites'
-    ? deliveries
-    : deliveries.filter((d) => d.site === siteName);
+  const siteDeliveries = siteName
+    ? deliveries.filter((d) => d.site === siteName)
+    : [];
 
-  const myRequests = siteName === 'All Sites'
-    ? materialRequests
-    : materialRequests.filter((r) => r.site === siteName);
+  const myRequests = siteName
+    ? materialRequests.filter((r) => r.site === siteName)
+    : [];
 
-  const sitePhotos = siteName === 'All Sites'
-    ? photos
-    : photos.filter((p) => p.site === siteName);
+  const sitePhotos = siteName
+    ? photos.filter((p) => p.site === siteName)
+    : [];
 
   const pendingIndentsCount = myRequests.filter((r) => r.status === 'Pending').length;
   const expectedDeliveriesCount = siteDeliveries.filter((d) => d.status === 'In Transit' || d.status === 'Expected').length;
@@ -132,23 +134,24 @@ export const SupervisorDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Site Switcher Dropdown */}
+            {/* Site Switcher Dropdown (Only for supervisor's assigned sites) */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-2 rounded-xl border border-white/20 text-xs">
-                <span className="text-slate-300 text-[11px] font-medium">Switch Site:</span>
-                <select
-                  value={siteName}
-                  onChange={(e) => setSelectedSite(e.target.value)}
-                  className="bg-transparent text-white font-bold text-xs outline-none cursor-pointer"
-                >
-                  <option value="All Sites" className="text-slate-900">All My Sites</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.name} className="text-slate-900">
-                      {s.name} ({s.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {myAssignedSites.length > 1 && (
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-2 rounded-xl border border-white/20 text-xs">
+                  <span className="text-slate-300 text-[11px] font-medium">Switch Site:</span>
+                  <select
+                    value={siteName}
+                    onChange={(e) => setSelectedSite(e.target.value)}
+                    className="bg-transparent text-white font-bold text-xs outline-none cursor-pointer"
+                  >
+                    {myAssignedSites.map((s) => (
+                      <option key={s.id} value={s.name} className="text-slate-900">
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <Link
                 to="/my-site"
@@ -161,19 +164,28 @@ export const SupervisorDashboard: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 text-center shadow-xs">
-          <Building2 className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-          <h3 className="text-base font-bold text-slate-800">No Construction Sites Assigned Yet</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-            There are no active project sites registered in the system. Create your first site or ask the Super Admin to assign your project location.
+        <div className="bg-amber-50/80 border-2 border-dashed border-amber-300 rounded-2xl p-8 text-center shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 border border-amber-200">
+            <Building2 className="w-7 h-7" />
+          </div>
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-amber-200/80 text-amber-900 mb-2 inline-block">
+            Site Assignment Pending
+          </span>
+          <h3 className="text-lg font-extrabold text-slate-900">No Construction Site Assigned Yet</h3>
+          <p className="text-xs text-slate-600 max-w-md mx-auto mt-2 leading-relaxed">
+            Your supervisor account (<strong>{user?.email || supervisorName}</strong>) has not been assigned to an active construction site yet.
+            <br />
+            Please ask the Super Admin (<strong>admin@anandhomes.com</strong>) to assign a site to your profile in the <strong>Sites Management</strong> portal.
           </p>
-          <div className="mt-4">
-            <Link
-              to="/sites"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#0D5C3A] text-white rounded-lg text-xs font-bold hover:bg-[#094228] transition-colors"
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refreshData()}
+              className="border-slate-300 hover:bg-white text-slate-700 font-bold"
             >
-              <Plus className="w-4 h-4" /> Go to Sites Management
-            </Link>
+              Refresh Status
+            </Button>
           </div>
         </div>
       )}

@@ -19,7 +19,9 @@ import { Button } from '../components/Button';
 import { EmptyState } from '../components/common/EmptyState';
 
 export const DeliveriesPage: React.FC = () => {
-  const { deliveries, sites, recordDelivery, globalSearch } = useDashboardContext();
+  const { deliveries, sites, myAssignedSites, roleMode, recordDelivery, globalSearch } = useDashboardContext();
+
+  const availableSites = roleMode === 'supervisor' ? myAssignedSites : sites;
 
   const [activeTab, setActiveTab] = useState<'All' | 'Expected' | 'In Transit' | 'Received' | 'Cancelled'>('Received');
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,7 +31,7 @@ export const DeliveriesPage: React.FC = () => {
   // New Delivery Form State
   const [newDlv, setNewDlv] = useState({
     supplier: '',
-    site: sites[0]?.name || '',
+    site: availableSites[0]?.name || '',
     material: '',
     expectedQty: '',
     receivedQty: '',
@@ -38,10 +40,10 @@ export const DeliveriesPage: React.FC = () => {
   });
 
   React.useEffect(() => {
-    if (!newDlv.site && sites.length > 0) {
-      setNewDlv((prev) => ({ ...prev, site: sites[0].name }));
+    if (!newDlv.site && availableSites.length > 0) {
+      setNewDlv((prev) => ({ ...prev, site: availableSites[0].name }));
     }
-  }, [sites, newDlv.site]);
+  }, [availableSites, newDlv.site]);
 
   const query = searchTerm || globalSearch;
   const filteredDeliveries = deliveries.filter((d) => {
@@ -69,7 +71,7 @@ export const DeliveriesPage: React.FC = () => {
     });
     setNewDlv({
       supplier: '',
-      site: sites[0]?.name || '',
+      site: availableSites[0]?.name || '',
       material: '',
       expectedQty: '',
       receivedQty: '',
@@ -369,17 +371,23 @@ export const DeliveriesPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Site</label>
-                  <select
-                    value={newDlv.site}
-                    onChange={(e) => setNewDlv({ ...newDlv, site: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
-                  >
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+                  {availableSites.length === 0 ? (
+                    <p className="text-[11px] text-rose-600 bg-rose-50 p-2 rounded border border-rose-200">
+                      No assigned site found.
+                    </p>
+                  ) : (
+                    <select
+                      value={newDlv.site}
+                      onChange={(e) => setNewDlv({ ...newDlv, site: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
+                    >
+                      {availableSites.map((s) => (
+                        <option key={s.id} value={s.name}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>

@@ -9,6 +9,7 @@ import {
   ActivityItem,
 } from '@project/shared';
 import { constructionService } from '../services/construction.service';
+import { useAuth } from '../hooks/useAuth';
 
 export type UserRoleMode = 'admin' | 'supervisor';
 
@@ -18,6 +19,7 @@ interface DashboardContextType {
   selectedSite: string;
   setSelectedSite: (site: string) => void;
   sitesList: string[];
+  myAssignedSites: Site[];
   sites: Site[];
   inventory: InventoryItem[];
   materialRequests: MaterialRequest[];
@@ -80,6 +82,7 @@ interface DashboardContextType {
     imageUrl: string;
   }) => Promise<void>;
   addSite: (site: Partial<Site>) => Promise<void>;
+  updateSite: (id: string, site: Partial<Site>) => Promise<void>;
   deleteSite: (id: string) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
 }
@@ -87,6 +90,7 @@ interface DashboardContextType {
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
 export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [roleMode, setRoleModeState] = useState<UserRoleMode>(() => {
     const saved = localStorage.getItem('ah_user_role');
     if (saved === 'supervisor' || saved === 'admin') return saved;
@@ -106,7 +110,9 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setRoleModeState(mode);
   };
 
-  const [selectedSite, setSelectedSite] = useState<string>('All Sites');
+  const isSupervisor = roleMode === 'supervisor' || user?.role === 'supervisor';
+
+  const [selectedSite, setSelectedSite] = useState<string>(() => (isSupervisor ? '' : 'All Sites'));
   const [globalSearch, setGlobalSearch] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
@@ -120,8 +126,31 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlertItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
 
-  // Compute site names list
-  const sitesList = ['All Sites', ...sites.map((s) => s.name)];
+  // Compute supervisor's assigned sites (explicit linkage, no false cross-sharing)
+  const myAssignedSites = sites.filter((s) => {
+    if (s.supervisorId && user?.id && String(s.supervisorId) === String(user.id)) return true;
+    if (s.supervisorEmail && user?.email && s.supervisorEmail.trim().toLowerCase() === user.email.trim().toLowerCase()) return true;
+    if (s.supervisor && user?.name && s.supervisor.trim().toLowerCase() === user.name.trim().toLowerCase()) return true;
+    return false;
+  });
+
+  // Compute site names list scoped to role
+  const sitesList = isSupervisor
+    ? myAssignedSites.map((s) => s.name)
+    : ['All Sites', ...sites.map((s) => s.name)];
+
+  // Synchronize active selected site for supervisor so it never bleeds into other sites
+  useEffect(() => {
+    if (isSupervisor) {
+      if (myAssignedSites.length > 0) {
+        if (!selectedSite || !myAssignedSites.some((s) => s.name === selectedSite)) {
+          setSelectedSite(myAssignedSites[0].name);
+        }
+      } else {
+        setSelectedSite('');
+      }
+    }
+  }, [isSupervisor, sites, user]);
 
   // Fetch all data from backend API
   const refreshData = useCallback(async () => {
@@ -407,6 +436,16 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const updateSite = async (id: string, siteData: Partial<Site>) => {
+    try {
+      await constructionService.updateSite(id, siteData);
+      await refreshData();
+    } catch (err) {
+      console.error('Failed to update site:', err);
+      throw err;
+    }
+  };
+
   const deleteSite = async (id: string) => {
     try {
       await constructionService.deleteSite(id);
@@ -433,6 +472,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         selectedSite,
         setSelectedSite,
         sitesList,
+        myAssignedSites,
         sites,
         inventory,
         materialRequests,
@@ -455,6 +495,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         recordDelivery,
         uploadPhoto,
         addSite,
+        updateSite,
         deleteSite,
         deleteDelivery,
       }}

@@ -11,6 +11,8 @@ class SiteBase(BaseModel):
     name: str = Field(..., examples=["Site Alpha"])
     location: str = Field(..., examples=["Chennai, TN"])
     supervisor: str = Field(..., examples=["Rajesh Kumar"])
+    supervisorId: Optional[str] = None
+    supervisorEmail: Optional[str] = None
     status: Literal["Active", "Inactive"] = "Active"
     totalMaterials: int = 0
     stockValue: float = 0.0
@@ -30,6 +32,8 @@ class SiteUpdate(BaseModel):
     name: Optional[str] = None
     location: Optional[str] = None
     supervisor: Optional[str] = None
+    supervisorId: Optional[str] = None
+    supervisorEmail: Optional[str] = None
     status: Optional[Literal["Active", "Inactive"]] = None
     totalMaterials: Optional[int] = None
     stockValue: Optional[float] = None

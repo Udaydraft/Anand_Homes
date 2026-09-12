@@ -19,13 +19,15 @@ import { constructionService } from '../services/construction.service';
 
 export const StockOutPage: React.FC = () => {
   const navigate = useNavigate();
-  const { sites, inventory, addStockOut } = useDashboardContext();
+  const { sites, myAssignedSites, roleMode, inventory, addStockOut } = useDashboardContext();
+
+  const availableSites = roleMode === 'supervisor' ? myAssignedSites : sites;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const [site, setSite] = useState(sites[0]?.name || '');
+  const [site, setSite] = useState(availableSites[0]?.name || '');
   const [material, setMaterial] = useState('Cement');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('Bags');
@@ -39,12 +41,12 @@ export const StockOutPage: React.FC = () => {
   const materials = ['Cement', 'Steel 12mm', 'Sand', 'Bricks', 'Paint', 'Gravel 20mm', 'Plywood', 'Rods 8mm'];
   const units = ['Bags', 'Ton', 'Loads', 'Nos', 'Boxes', 'Sheets', 'Liters'];
 
-  // Auto-select first site
+  // Auto-select first available site
   useEffect(() => {
-    if (!site && sites.length > 0) {
-      setSite(sites[0].name);
+    if (!site && availableSites.length > 0) {
+      setSite(availableSites[0].name);
     }
-  }, [sites, site]);
+  }, [availableSites, site]);
 
   // Lookup current real available stock in MongoDB
   const currentItem = inventory.find(
@@ -149,25 +151,35 @@ export const StockOutPage: React.FC = () => {
         />
       )}
 
-      {/* When no sites exist, show actionable banner */}
-      {sites.length === 0 ? (
+      {/* When no sites exist for this user, show actionable banner */}
+      {availableSites.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 text-center space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
             <Building2 className="w-7 h-7" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900">No Construction Sites Available</h3>
+            <h3 className="text-base font-bold text-slate-900">
+              {roleMode === 'supervisor' ? 'No Project Site Assigned' : 'No Construction Sites Available'}
+            </h3>
             <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-              You must add at least one project site before recording stock disbursements.
+              {roleMode === 'supervisor'
+                ? 'Your supervisor account has not been assigned to a project site. Please contact an administrator to assign a site before recording stock disbursements.'
+                : 'You must add at least one project site before recording stock disbursements.'}
             </p>
           </div>
           <div className="pt-2">
-            <Link
-              to="/sites"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#0D5C3A] text-white rounded-lg text-xs font-bold hover:bg-[#094228] transition-colors shadow-sm"
-            >
-              <Plus className="w-4 h-4" /> Add Project Site First
-            </Link>
+            {roleMode === 'supervisor' ? (
+              <Button variant="outline" size="sm" onClick={() => navigate('/supervisor-dashboard')}>
+                Back to Dashboard
+              </Button>
+            ) : (
+              <Link
+                to="/sites"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0D5C3A] text-white rounded-lg text-xs font-bold hover:bg-[#094228] transition-colors shadow-sm"
+              >
+                <Plus className="w-4 h-4" /> Add Project Site First
+              </Link>
+            )}
           </div>
         </div>
       ) : (
@@ -184,7 +196,7 @@ export const StockOutPage: React.FC = () => {
                   onChange={(e) => setSite(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#0D5C3A] text-slate-800 font-medium"
                 >
-                  {sites.map((s) => (
+                  {availableSites.map((s) => (
                     <option key={s.id} value={s.name}>
                       {s.name} ({s.code}) - {s.location}
                     </option>

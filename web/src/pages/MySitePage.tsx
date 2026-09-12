@@ -20,20 +20,22 @@ import {
 import { EmptyState } from '../components/common/EmptyState';
 
 export const MySitePage: React.FC = () => {
-  const { selectedSite, sites, photos, inventory, deliveries } = useDashboardContext();
+  const { selectedSite, sites, myAssignedSites, roleMode, photos, inventory, deliveries } = useDashboardContext();
   const navigate = useNavigate();
 
-  const site = sites.find((s) => s.name === selectedSite) || sites[0];
+  // If supervisor, strictly scope to myAssignedSites; if admin, scope to sites
+  const targetSites = roleMode === 'supervisor' ? myAssignedSites : sites;
+  const site = targetSites.find((s) => s.name === selectedSite) || targetSites[0] || null;
 
   if (!site) {
     return (
       <EmptyState
         variant="card"
-        icon={<Building2 className="w-10 h-10 text-slate-400" />}
-        title="No Sites Found"
-        description="There are no construction sites created yet. Add your first site to track inventory, progress photos, and deliveries."
-        actionLabel="Go to Sites"
-        onAction={() => navigate('/sites')}
+        icon={<Building2 className="w-10 h-10 text-amber-500" />}
+        title="No Project Site Assigned"
+        description="You currently do not have any construction sites assigned to your supervisor account. Please ask an administrator to assign a site to your profile in the Sites Management portal."
+        actionLabel="Back to Dashboard"
+        onAction={() => navigate(roleMode === 'supervisor' ? '/supervisor-dashboard' : '/dashboard')}
       />
     );
   }

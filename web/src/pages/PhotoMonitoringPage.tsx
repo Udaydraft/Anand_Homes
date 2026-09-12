@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useDashboardContext } from '../context/DashboardContext';
 import {
   Camera,
@@ -43,10 +43,16 @@ export const PhotoMonitoringPage: React.FC = () => {
   // New Photo Form State
   const [newPhoto, setNewPhoto] = useState({
     title: '',
-    site: availableSites[0] || 'Main Site',
+    site: availableSites[0] || '',
     type: 'Site Progress' as 'Stock In' | 'Stock Out' | 'Site Progress',
     imageUrl: '',
   });
+
+  useEffect(() => {
+    if (!newPhoto.site && availableSites.length > 0) {
+      setNewPhoto((prev) => ({ ...prev, site: availableSites[0] }));
+    }
+  }, [availableSites, newPhoto.site]);
 
   const photoTypes = ['All', 'Stock In', 'Stock Out', 'Site Progress'];
 
@@ -175,7 +181,7 @@ export const PhotoMonitoringPage: React.FC = () => {
             className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 outline-none focus:border-[#0D5C3A]"
           >
             <option value="All">All Sites</option>
-            {sitesList.map((s) => (
+            {sitesList.filter((s) => s !== 'All Sites').map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
