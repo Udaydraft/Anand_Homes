@@ -79,7 +79,7 @@ async def create_property(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> ApiResponse[PropertyResponse]:
     service = PropertyService(db)
-    prop = await service.create_property(payload)
+    prop = await service.create_property(payload, current_user=current_user)
     return ApiResponse(success=True, message="Property created successfully", data=prop)
 
 
@@ -207,7 +207,11 @@ async def list_enquiries(
 ) -> ApiResponse[List[EnquiryResponse]]:
     service = PropertyService(db)
     is_admin = current_user.role in ["admin", "agent", "supervisor"]
-    enqs = await service.list_enquiries(user_id=str(current_user.id), is_admin=is_admin)
+    enqs = await service.list_enquiries(
+        user_id=str(current_user.id),
+        is_admin=is_admin,
+        user_email=current_user.email,
+    )
     return ApiResponse(success=True, message="Enquiries retrieved successfully", data=enqs)
 
 

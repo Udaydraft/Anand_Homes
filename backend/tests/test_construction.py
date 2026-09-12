@@ -189,3 +189,110 @@ async def test_upload_file_endpoint(client: AsyncClient):
     assert data["url"].startswith("/uploads/")
     assert data["filename"].endswith(".jpg")
 
+
+@pytest.mark.asyncio
+async def test_admin_data_isolation(client: AsyncClient):
+    # Register Admin 1
+    reg1 = await client.post(
+        "/api/auth/register",
+        json={
+            "name": "Admin One",
+            "email": "admin1@test.com",
+            "password": "Password123!",
+            "role": "admin",
+        },
+    )
+    token1 = reg1.json()["data"]["tokens"]["access_token"]
+    headers1 = {"Authorization": f"Bearer {token1}"}
+
+    # Register Admin 2
+    reg2 = await client.post(
+        "/api/auth/register",
+        json={
+            "name": "Admin Two",
+            "email": "admin2@test.com",
+            "password": "Password123!",
+            "role": "admin",
+        },
+    )
+    token2 = reg2.json()["data"]["tokens"]["access_token"]
+    headers2 = {"Authorization": f"Bearer {token2}"}
+
+    # Admin 1 creates a site
+    site1_res = await client.post(
+        "/api/sites",
+        json={
+            "code": "A1-S-01",
+            "name": "Admin1 Mega Site",
+            "location": "Chennai",
+            "supervisor": "Rajesh Kumar",
+            "status": "Active",
+            "totalMaterials": 10,
+            "stockValue": 500000,
+        },
+        headers=headers1,
+    )
+    assert site1_res.status_code == 201
+
+    # Admin 1 adds inventory to Admin1 Mega Site
+    stock_in_res = await client.post(
+        "/api/stock/in",
+        json={
+            "site": "Admin1 Mega Site",
+            "material": "TMT Steel 16mm",
+            "quantity": 100,
+            "unit": "Tons",
+            "supplier": "Tata Steel",
+            "invoiceNo": "INV-A1-01",
+            "deliveryDate": "12 Mar 2025",
+        },
+        headers=headers1,
+    )
+    assert stock_in_res.status_code == 201
+
+    # Admin 2 lists sites - must NOT see Admin1 Mega Site!
+    sites_a2 = await client.get("/api/sites", headers=headers2)
+    assert sites_a2.status_code == 200
+    a2_site_names = [s["name"] for s in sites_a2.json()["data"]]
+    assert "Admin1 Mega Site" not in a2_site_names
+    assert len(a2_site_names) == 0
+
+    # Admin 2 lists inventory - must NOT see Admin 1's inventory!
+    inv_a2 = await client.get("/api/inventory", headers=headers2)
+    assert inv_a2.status_code == 200
+    assert len(inv_a2.json()["data"]) == 0
+
+    # Admin 2 dashboard summary - must show 0 sites and 0 stock value!
+    dash_a2 = await client.get("/api/dashboard/summary", headers=headers2)
+    assert dash_a2.status_code == 200
+    assert dash_a2.json()["data"]["totalSites"] == 0
+    assert dash_a2.json()["data"]["totalInventoryValue"] == 0
+
+    # Admin 2 creates their own site
+    site2_res = await client.post(
+        "/api/sites",
+        json={
+            "code": "A2-S-01",
+            "name": "Admin2 Ultra Tower",
+            "location": "Coimbatore",
+            "supervisor": "Suresh P",
+            "status": "Active",
+            "totalMaterials": 5,
+            "stockValue": 300000,
+        },
+        headers=headers2,
+    )
+    assert site2_res.status_code == 201
+
+    # Admin 2 sees only their site
+    sites_a2_after = await client.get("/api/sites", headers=headers2)
+    a2_names_after = [s["name"] for s in sites_a2_after.json()["data"]]
+    assert a2_names_after == ["Admin2 Ultra Tower"]
+
+    # Admin 1 sees only their site
+    sites_a1_after = await client.get("/api/sites", headers=headers1)
+    a1_names_after = [s["name"] for s in sites_a1_after.json()["data"]]
+    assert "Admin1 Mega Site" in a1_names_after
+    assert "Admin2 Ultra Tower" not in a1_names_after
+
+

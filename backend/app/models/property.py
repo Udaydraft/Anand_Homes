@@ -24,6 +24,7 @@ class PropertyModel:
         site_id: Optional[str] = None,
         agent_name: str = "AnandHomes Sales Team",
         agent_contact: str = "+91 98765 43210",
+        created_by: Optional[str] = None,
         id: Optional[str] = None,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
@@ -45,6 +46,7 @@ class PropertyModel:
         self.site_id = site_id
         self.agent_name = agent_name
         self.agent_contact = agent_contact
+        self.created_by = created_by
         now = datetime.now(timezone.utc)
         self.created_at = created_at or now
         self.updated_at = updated_at or now
@@ -69,6 +71,7 @@ class PropertyModel:
             "siteId": self.site_id,
             "agentName": self.agent_name,
             "agentContact": self.agent_contact,
+            "createdBy": self.created_by,
             "createdAt": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
             "updatedAt": self.updated_at.isoformat() if isinstance(self.updated_at, datetime) else self.updated_at,
         }

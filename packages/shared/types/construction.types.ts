@@ -8,6 +8,9 @@ export interface Site {
   supervisor: string;
   supervisorId?: string;
   supervisorEmail?: string;
+  adminId?: string;
+  adminEmail?: string;
+  createdBy?: string;
   status: 'Active' | 'Inactive';
   totalMaterials: number;
   stockValue: number;

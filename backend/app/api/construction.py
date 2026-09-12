@@ -42,9 +42,12 @@ async def _resolve_allowed_sites(
     service: ConstructionService,
     current_user: Optional[UserModel],
 ) -> Optional[List[str]]:
-    """Determine allowed site names for scoped access based on supervisor role."""
-    if current_user and current_user.role == "supervisor":
-        return await service.get_supervisor_site_names(current_user)
+    """Determine allowed site names for scoped access based on user role."""
+    if current_user:
+        if current_user.role == "supervisor":
+            return await service.get_supervisor_site_names(current_user)
+        elif current_user.role == "admin":
+            return await service.get_admin_site_names(current_user)
     return None
 
 
@@ -61,16 +64,24 @@ async def list_sites(
     target_supervisor = supervisor
     supervisor_id = None
     supervisor_email = None
+    admin_id = None
+    admin_email = None
 
-    if current_user and current_user.role == "supervisor" and not target_supervisor:
-        supervisor_id = str(current_user.id)
-        supervisor_email = current_user.email
-        target_supervisor = current_user.name
+    if current_user:
+        if current_user.role == "supervisor" and not target_supervisor:
+            supervisor_id = str(current_user.id)
+            supervisor_email = current_user.email
+            target_supervisor = current_user.name
+        elif current_user.role == "admin":
+            admin_id = str(current_user.id)
+            admin_email = current_user.email
 
     sites = await service.list_sites(
         supervisor=target_supervisor,
         supervisor_id=supervisor_id,
         supervisor_email=supervisor_email,
+        admin_id=admin_id,
+        admin_email=admin_email,
     )
     return ApiResponse(success=True, message="Sites retrieved successfully", data=sites)
 
@@ -85,9 +96,13 @@ async def get_site(site_id: str, db: AsyncIOMotorDatabase = Depends(get_database
 
 
 @router.post("/sites", response_model=ApiResponse[SiteResponse], status_code=status.HTTP_201_CREATED)
-async def create_site(payload: SiteCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
+async def create_site(
+    payload: SiteCreate,
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     service = ConstructionService(db)
-    site = await service.create_site(payload)
+    site = await service.create_site(payload, admin_user=current_user)
     return ApiResponse(success=True, message="Site created successfully", data=site)
 
 
@@ -372,7 +387,14 @@ async def get_dashboard_summary(
 ):
     service = ConstructionService(db)
     allowed_sites = await _resolve_allowed_sites(service, current_user)
-    summary = await service.get_dashboard_summary(site, allowed_sites=allowed_sites)
+    admin_id = str(current_user.id) if current_user and current_user.role == "admin" else None
+    admin_email = current_user.email if current_user and current_user.role == "admin" else None
+    summary = await service.get_dashboard_summary(
+        site,
+        allowed_sites=allowed_sites,
+        admin_id=admin_id,
+        admin_email=admin_email,
+    )
     return ApiResponse(success=True, message="Dashboard summary retrieved", data=summary)
 
 

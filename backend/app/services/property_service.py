@@ -134,7 +134,11 @@ class PropertyService:
 
         return self._to_property_response(doc, is_fav)
 
-    async def create_property(self, payload: PropertyCreate) -> PropertyResponse:
+    async def create_property(
+        self, payload: PropertyCreate, current_user: Optional[Any] = None
+    ) -> PropertyResponse:
+        created_by = str(getattr(current_user, "id", "")) if current_user else None
+        agent_name = payload.agentName or (getattr(current_user, "name", None) if current_user else "AnandHomes Sales Team")
         model = PropertyModel(
             title=payload.title,
             description=payload.description,
@@ -150,8 +154,9 @@ class PropertyService:
             gallery_images=payload.galleryImages,
             amenities=payload.amenities,
             site_id=payload.siteId,
-            agent_name=payload.agentName,
+            agent_name=agent_name,
             agent_contact=payload.agentContact,
+            created_by=created_by,
         )
         doc = model.to_dict()
         await self.properties.insert_one(doc)
@@ -269,11 +274,24 @@ class PropertyService:
         )
 
     async def list_enquiries(
-        self, user_id: Optional[str] = None, is_admin: bool = False
+        self,
+        user_id: Optional[str] = None,
+        is_admin: bool = False,
+        user_email: Optional[str] = None,
     ) -> List[EnquiryResponse]:
-        query = {}
+        query: Dict[str, Any] = {}
         if not is_admin and user_id:
             query = {"userId": user_id}
+        elif is_admin and user_email and user_email.lower() != "admin@anandhomes.com":
+            admin_props = await self.properties.find(
+                {"$or": [{"createdBy": user_id}, {"userId": user_id}]},
+                {"id": 1, "_id": 1},
+            ).to_list(length=200)
+            admin_prop_ids = [str(p.get("id") or p.get("_id")) for p in admin_props]
+            if admin_prop_ids:
+                query = {"propertyId": {"$in": admin_prop_ids}}
+            else:
+                query = {"userId": user_id}
 
         cursor = self.enquiries.find(query).sort("createdAt", -1)
         raw_enqs = await cursor.to_list(length=100)
@@ -348,6 +366,7 @@ class PropertyService:
     # ---------------------------------------------------------------------------
     async def get_dashboard_data(self, user: Any) -> DashboardDataResponse:
         user_id = str(user.id)
+        user_email = getattr(user, "email", "")
         is_admin = getattr(user, "role", "user") == "admin"
 
         # Counts
@@ -355,19 +374,36 @@ class PropertyService:
         favorites_count = await self.favorites.count_documents({"userId": user_id})
         enquiries_count = (
             await self.enquiries.count_documents({})
-            if is_admin
+            if (is_admin and user_email.lower() == "admin@anandhomes.com")
             else await self.enquiries.count_documents({"userId": user_id})
         )
-        active_sites_count = await self.sites.count_documents({"status": "Active"})
 
-        # Construction stock value calculation
-        sites_cursor = self.sites.find({}, {"stockValue": 1})
+        if is_admin:
+            site_query_admin: Dict[str, Any] = {
+                "$or": [
+                    {"adminId": user_id},
+                    {"createdBy": user_id},
+                    {"adminEmail": {"$regex": f"^{re.escape(user_email)}$", "$options": "i"}},
+                ]
+            }
+            if user_email and user_email.lower() == "admin@anandhomes.com":
+                site_query_admin["$or"].extend([
+                    {"adminId": None},
+                    {"adminId": {"$exists": False}},
+                    {"adminId": ""},
+                ])
+            active_sites_count = await self.sites.count_documents({"status": "Active", **site_query_admin})
+            sites_cursor = self.sites.find(site_query_admin, {"stockValue": 1})
+        else:
+            active_sites_count = await self.sites.count_documents({"status": "Active"})
+            sites_cursor = self.sites.find({}, {"stockValue": 1})
+
         sites_list = await sites_cursor.to_list(length=100)
         total_stock_val = sum(float(s.get("stockValue", 0)) for s in sites_list)
         formatted_stock = format_inr(total_stock_val)
 
         # Recent enquiries
-        recent_enqs = await self.list_enquiries(user_id=user_id, is_admin=is_admin)
+        recent_enqs = await self.list_enquiries(user_id=user_id, is_admin=is_admin, user_email=user_email)
 
         # Featured properties
         featured_cursor = self.properties.find({"featured": True}).limit(6)

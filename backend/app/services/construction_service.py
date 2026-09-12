@@ -82,6 +82,7 @@ class ConstructionService:
         return doc
 
     # -----------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Sites CRUD
     # -----------------------------------------------------------------------
     async def list_sites(
@@ -89,21 +90,44 @@ class ConstructionService:
         supervisor: Optional[str] = None,
         supervisor_id: Optional[str] = None,
         supervisor_email: Optional[str] = None,
+        admin_id: Optional[str] = None,
+        admin_email: Optional[str] = None,
     ) -> List[SiteResponse]:
         query: Dict[str, Any] = {}
-        or_clauses: List[Dict[str, Any]] = []
+        and_clauses: List[Dict[str, Any]] = []
 
+        # Admin isolation
+        if admin_id or admin_email:
+            admin_clauses: List[Dict[str, Any]] = []
+            if admin_id:
+                admin_clauses.append({"adminId": admin_id})
+                admin_clauses.append({"createdBy": admin_id})
+            if admin_email:
+                admin_clauses.append({"adminEmail": {"$regex": f"^{re.escape(admin_email)}$", "$options": "i"}})
+            if admin_email and admin_email.lower() == "admin@anandhomes.com":
+                admin_clauses.append({"adminId": None})
+                admin_clauses.append({"adminId": {"$exists": False}})
+                admin_clauses.append({"adminId": ""})
+            if admin_clauses:
+                and_clauses.append({"$or": admin_clauses})
+
+        # Supervisor isolation
+        sup_clauses: List[Dict[str, Any]] = []
         if supervisor_id:
-            or_clauses.append({"supervisorId": supervisor_id})
+            sup_clauses.append({"supervisorId": supervisor_id})
         if supervisor_email:
-            or_clauses.append({"supervisorEmail": {"$regex": f"^{re.escape(supervisor_email)}$", "$options": "i"}})
+            sup_clauses.append({"supervisorEmail": {"$regex": f"^{re.escape(supervisor_email)}$", "$options": "i"}})
         if supervisor:
-            or_clauses.append({"supervisor": {"$regex": f"^{re.escape(supervisor)}$", "$options": "i"}})
-            or_clauses.append({"supervisorEmail": {"$regex": f"^{re.escape(supervisor)}$", "$options": "i"}})
-            or_clauses.append({"supervisorId": supervisor})
+            sup_clauses.append({"supervisor": {"$regex": f"^{re.escape(supervisor)}$", "$options": "i"}})
+            sup_clauses.append({"supervisorEmail": {"$regex": f"^{re.escape(supervisor)}$", "$options": "i"}})
+            sup_clauses.append({"supervisorId": supervisor})
+        if sup_clauses:
+            and_clauses.append({"$or": sup_clauses})
 
-        if or_clauses:
-            query["$or"] = or_clauses
+        if len(and_clauses) == 1:
+            query = and_clauses[0]
+        elif len(and_clauses) > 1:
+            query = {"$and": and_clauses}
 
         cursor = self.sites.find(query)
         items = []
@@ -112,6 +136,31 @@ class ConstructionService:
             if res:
                 items.append(SiteResponse(**res))
         return items
+
+    async def get_admin_site_names(self, admin_user: Any) -> List[str]:
+        """Find names of all project sites owned by a specific admin."""
+        user_id = str(getattr(admin_user, "id", ""))
+        user_email = getattr(admin_user, "email", "")
+        admin_or: List[Dict[str, Any]] = []
+        if user_id:
+            admin_or.append({"adminId": user_id})
+            admin_or.append({"createdBy": user_id})
+        if user_email:
+            admin_or.append({"adminEmail": {"$regex": f"^{re.escape(user_email)}$", "$options": "i"}})
+        if user_email and user_email.lower() == "admin@anandhomes.com":
+            admin_or.append({"adminId": None})
+            admin_or.append({"adminId": {"$exists": False}})
+            admin_or.append({"adminId": ""})
+
+        if not admin_or:
+            return []
+
+        cursor = self.sites.find({"$or": admin_or})
+        names = []
+        async for doc in cursor:
+            if doc.get("name"):
+                names.append(doc["name"])
+        return names
 
     async def get_supervisor_site_names(self, supervisor_user: Any) -> List[str]:
         """Find names of all project sites assigned to a specific supervisor."""
@@ -142,12 +191,21 @@ class ConstructionService:
         res = self._doc_to_res(doc)
         return SiteResponse(**res) if res else None
 
-    async def create_site(self, data: SiteCreate) -> SiteResponse:
+    async def create_site(self, data: SiteCreate, admin_user: Optional[Any] = None) -> SiteResponse:
         site_id = f"s-{uuid.uuid4().hex[:6]}"
         doc = data.model_dump()
         doc["id"] = site_id
         doc["_id"] = site_id
         doc["createdAt"] = datetime.now(timezone.utc).isoformat()
+        if admin_user:
+            doc["adminId"] = str(getattr(admin_user, "id", ""))
+            doc["adminEmail"] = getattr(admin_user, "email", "")
+            doc["createdBy"] = str(getattr(admin_user, "id", ""))
+        elif data.adminId:
+            doc["adminId"] = data.adminId
+            doc["adminEmail"] = data.adminEmail
+            doc["createdBy"] = data.createdBy or data.adminId
+
         if not doc.get("stockValueFormatted") or doc["stockValueFormatted"] == "₹0":
             doc["stockValueFormatted"] = _format_inr(doc.get("stockValue", 0))
 
@@ -626,10 +684,14 @@ class ConstructionService:
         return items
 
     async def get_dashboard_summary(
-        self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
+        self,
+        site: Optional[str] = None,
+        allowed_sites: Optional[List[str]] = None,
+        admin_id: Optional[str] = None,
+        admin_email: Optional[str] = None,
     ) -> DashboardSummaryResponse:
         # Sites
-        sites_list = await self.list_sites()
+        sites_list = await self.list_sites(admin_id=admin_id, admin_email=admin_email)
         if allowed_sites is not None:
             sites_list = [s for s in sites_list if s.name in allowed_sites]
 
