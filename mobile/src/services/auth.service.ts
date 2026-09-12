@@ -59,4 +59,10 @@ export const authService = {
     });
     return res.data;
   },
+
+  async listUsers(role?: string): Promise<User[]> {
+    const params = role ? { role } : {};
+    const res = await apiClient.get<ApiResponse<User[]>>('/users', { params });
+    return res.data.data;
+  },
 };

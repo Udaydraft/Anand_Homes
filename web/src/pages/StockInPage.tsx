@@ -146,7 +146,7 @@ export const StockInPage: React.FC = () => {
           </div>
           <div className="pt-2">
             {roleMode === 'supervisor' ? (
-              <Button variant="outline" size="sm" onClick={() => navigate('/supervisor-dashboard')}>
+              <Button variant="outline" size="sm" onClick={() => navigate('/supervisor/dashboard')}>
                 Back to Dashboard
               </Button>
             ) : (

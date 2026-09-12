@@ -9,6 +9,7 @@ import {
   ActivityItem,
 } from '@project/shared';
 import { constructionService } from '../services/construction.service';
+import { useAuth } from '../hooks/useAuth';
 
 export type MobileRoleMode = 'admin' | 'supervisor';
 
@@ -19,6 +20,7 @@ interface MobileDataContextType {
   selectedSite: string;
   setSelectedSite: (site: string) => void;
   sites: Site[];
+  myAssignedSites: Site[];
   inventory: InventoryItem[];
   materialRequests: MaterialRequest[];
   deliveries: Delivery[];
@@ -58,14 +60,27 @@ interface MobileDataContextType {
   approveRequest: (id: string) => Promise<void>;
   rejectRequest: (id: string) => Promise<void>;
   cancelRequest: (id: string) => Promise<void>;
+  updateSite: (id: string, site: Partial<Site>) => Promise<void>;
 }
 
 const MobileDataContext = createContext<MobileDataContextType | undefined>(undefined);
 
 export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [roleMode, setRoleMode] = useState<MobileRoleMode>('admin');
+  const { user } = useAuth();
+  const [roleMode, setRoleMode] = useState<MobileRoleMode>(
+    user?.role === 'supervisor' ? 'supervisor' : 'admin'
+  );
   const [selectedSite, setSelectedSite] = useState<string>('All Sites');
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
+
+  // Sync roleMode whenever authenticated user profile changes
+  useEffect(() => {
+    if (user?.role === 'supervisor') {
+      setRoleMode('supervisor');
+    } else if (user?.role === 'admin') {
+      setRoleMode('admin');
+    }
+  }, [user]);
 
   // Clean data collections (Loaded from MongoDB via API)
   const [sites, setSites] = useState<Site[]>([]);
@@ -76,6 +91,33 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlertItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
 
+  // Strict supervisor assigned sites calculation (Zero cross-sharing)
+  const myAssignedSites = sites.filter((s) => {
+    if (s.supervisorId && user?.id && String(s.supervisorId) === String(user.id)) return true;
+    if (s.supervisorEmail && user?.email && s.supervisorEmail.trim().toLowerCase() === user.email.trim().toLowerCase()) return true;
+    if (s.supervisor && user?.name && s.supervisor.trim().toLowerCase() === user.name.trim().toLowerCase()) return true;
+    return false;
+  });
+
+  const isSupervisor = roleMode === 'supervisor' || user?.role === 'supervisor';
+
+  // Synchronize active selected site for supervisor so it never defaults to 'All Sites' or leaks data
+  useEffect(() => {
+    if (isSupervisor) {
+      if (myAssignedSites.length > 0) {
+        if (!selectedSite || selectedSite === 'All Sites' || !myAssignedSites.some((s) => s.name === selectedSite)) {
+          setSelectedSite(myAssignedSites[0].name);
+        }
+      } else {
+        setSelectedSite('');
+      }
+    } else {
+      if (!selectedSite) {
+        setSelectedSite('All Sites');
+      }
+    }
+  }, [isSupervisor, myAssignedSites, selectedSite]);
+
   const toggleRole = () => {
     setRoleMode((prev) => (prev === 'admin' ? 'supervisor' : 'admin'));
   };
@@ -84,31 +126,32 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setIsLoadingData(true);
     try {
       const backendSites = await constructionService.getSites();
-      if (backendSites && backendSites.length > 0) setSites(backendSites);
+      if (Array.isArray(backendSites)) setSites(backendSites);
 
-      const backendInv = await constructionService.getInventory(selectedSite);
+      const targetSiteQuery = isSupervisor ? selectedSite : selectedSite;
+      const backendInv = await constructionService.getInventory(targetSiteQuery);
       if (backendInv) setInventory(backendInv);
 
-      const backendAlerts = await constructionService.getLowStock(selectedSite);
+      const backendAlerts = await constructionService.getLowStock(targetSiteQuery);
       if (backendAlerts) setLowStockAlerts(backendAlerts);
 
-      const backendReqs = await constructionService.getRequests(selectedSite);
+      const backendReqs = await constructionService.getRequests(targetSiteQuery);
       if (backendReqs) setMaterialRequests(backendReqs);
 
-      const backendDelivs = await constructionService.getDeliveries(selectedSite);
+      const backendDelivs = await constructionService.getDeliveries(targetSiteQuery);
       if (backendDelivs) setDeliveries(backendDelivs);
 
-      const backendPhotos = await constructionService.getPhotos(selectedSite);
+      const backendPhotos = await constructionService.getPhotos(targetSiteQuery);
       if (backendPhotos) setPhotos(backendPhotos);
 
-      const backendActs = await constructionService.getActivities(selectedSite);
-      if (backendActs && backendActs.length > 0) setActivities(backendActs);
+      const backendActs = await constructionService.getActivities(targetSiteQuery);
+      if (Array.isArray(backendActs)) setActivities(backendActs);
     } catch (err) {
-      console.warn('Mobile: Backend currently unreachable, using local state:', err);
+      console.warn('Mobile: Backend query update failed, using cached state:', err);
     } finally {
       setIsLoadingData(false);
     }
-  }, [selectedSite]);
+  }, [selectedSite, isSupervisor]);
 
   useEffect(() => {
     refreshData();
@@ -173,7 +216,7 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     try {
       await constructionService.createRequest({
         ...data,
-        requestedBy: roleMode === 'admin' ? 'Admin User' : 'Rajesh Kumar',
+        requestedBy: user?.name || (roleMode === 'admin' ? 'Admin User' : 'Site Supervisor'),
       });
       await refreshData();
     } catch {
@@ -184,7 +227,7 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         material: data.material,
         quantity: data.quantity,
         unit: data.unit,
-        requestedBy: roleMode === 'admin' ? 'Admin User' : 'Rajesh Kumar',
+        requestedBy: user?.name || (roleMode === 'admin' ? 'Admin User' : 'Site Supervisor'),
         requestedOn: 'Today',
         requiredDate: data.requiredDate || 'Next week',
         purpose: data.purpose || 'Foundation Work',
@@ -226,6 +269,17 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
+  const updateSite = async (id: string, siteData: Partial<Site>) => {
+    try {
+      const updated = await constructionService.updateSite(id, siteData);
+      setSites((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      await refreshData();
+    } catch (e) {
+      console.warn('Mobile updateSite error:', e);
+      setSites((prev) => prev.map((s) => (s.id === id ? { ...s, ...siteData } : s)));
+    }
+  };
+
   return (
     <MobileDataContext.Provider
       value={{
@@ -235,6 +289,7 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         selectedSite,
         setSelectedSite,
         sites,
+        myAssignedSites,
         inventory,
         materialRequests,
         deliveries,
@@ -249,6 +304,7 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         approveRequest,
         rejectRequest,
         cancelRequest,
+        updateSite,
       }}
     >
       {children}

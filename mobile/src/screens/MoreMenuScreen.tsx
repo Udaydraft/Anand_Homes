@@ -10,12 +10,14 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useMobileData } from '../context/MobileDataContext';
+import { useAuth } from '../hooks/useAuth';
 import { AnandHomesMobileLogo } from '../components/AnandHomesMobileLogo';
 import { Ionicons } from '@expo/vector-icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MoreMenu'>;
 
 export const MoreMenuScreen: React.FC<Props> = ({ navigation }) => {
+  const { user } = useAuth();
   const { roleMode, toggleRole } = useMobileData();
 
   const menuItems: {
@@ -33,10 +35,9 @@ export const MoreMenuScreen: React.FC<Props> = ({ navigation }) => {
     { label: 'Material Requests', screen: 'MaterialRequests', icon: 'document-text-outline' },
     { label: 'Deliveries', screen: 'Deliveries', icon: 'car-outline' },
     { label: 'Photo Monitoring', screen: 'PhotoMonitoring', icon: 'camera-outline' },
-    { label: 'Site Map View', screen: 'SiteMapView', icon: 'map-outline' },
-    { label: 'Low Stock Alerts', screen: 'LowStockAlert', icon: 'warning-outline' },
-    { label: 'Reports', screen: 'Reports', icon: 'bar-chart-outline' },
-    { label: 'Profile', screen: 'Profile', icon: 'person-outline' },
+    { label: 'Low Stock Alerts', screen: 'LowStockAlert', icon: 'alert-circle-outline' },
+    { label: 'Interactive Map View', screen: 'SiteMapView', icon: 'map-outline' },
+    { label: 'Reports & Analytics', screen: 'Reports', icon: 'pie-chart-outline' },
   ];
 
   return (
@@ -55,7 +56,7 @@ export const MoreMenuScreen: React.FC<Props> = ({ navigation }) => {
           <AnandHomesMobileLogo />
           <View style={styles.roleToggle}>
             <Text style={styles.roleToggleText}>
-              Logged in as: <Text style={{ color: '#E5A91E' }}>{roleMode === 'admin' ? 'Super Admin' : 'Rajesh Kumar (Site Alpha)'}</Text>
+              Logged in as: <Text style={{ color: '#E5A91E' }}>{user?.name || (roleMode === 'admin' ? 'Super Admin' : 'Site Supervisor')}</Text>
             </Text>
           </View>
         </View>

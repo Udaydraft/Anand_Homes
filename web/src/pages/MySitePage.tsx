@@ -35,7 +35,7 @@ export const MySitePage: React.FC = () => {
         title="No Project Site Assigned"
         description="You currently do not have any construction sites assigned to your supervisor account. Please ask an administrator to assign a site to your profile in the Sites Management portal."
         actionLabel="Back to Dashboard"
-        onAction={() => navigate(roleMode === 'supervisor' ? '/supervisor-dashboard' : '/dashboard')}
+        onAction={() => navigate(roleMode === 'supervisor' ? '/supervisor/dashboard' : '/admin/dashboard')}
       />
     );
   }

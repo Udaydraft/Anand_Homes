@@ -16,9 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 type Props = NativeStackScreenProps<RootStackParamList, 'MySite'>;
 
 export const MySiteScreen: React.FC<Props> = ({ navigation }) => {
-  const { selectedSite, sites } = useMobileData();
+  const { roleMode, selectedSite, sites, myAssignedSites } = useMobileData();
 
-  const site = sites.find((s) => s.name === selectedSite) || sites[0];
+  const targetSites = roleMode === 'supervisor' ? myAssignedSites : sites;
+  const site = targetSites.find((s) => s.name === selectedSite) || targetSites[0] || null;
 
   if (!site) {
     return (
@@ -30,13 +31,27 @@ export const MySiteScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.headerTitle}>My Site</Text>
         </View>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <Ionicons name="business-outline" size={48} color="#94A3B8" />
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginTop: 12 }}>
-            No Site Available
+          <Ionicons name="alert-circle-outline" size={54} color="#D97706" />
+          <Text style={{ fontSize: 17, fontWeight: '800', color: '#1E293B', marginTop: 14 }}>
+            {roleMode === 'supervisor' ? 'No Project Site Assigned' : 'No Sites Found'}
           </Text>
-          <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 6 }}>
-            There are no sites in the system yet. Please add a site to view its details.
+          <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 8, lineHeight: 18, maxWidth: 280 }}>
+            {roleMode === 'supervisor'
+              ? 'You do not have any construction sites assigned to your supervisor account. Please ask an administrator to assign a site to you.'
+              : 'There are no active construction sites created yet. Add a site from the Sites directory to view its details.'}
           </Text>
+          <TouchableOpacity
+            style={{
+              marginTop: 20,
+              backgroundColor: '#0D5C3A',
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              borderRadius: 10,
+            }}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>Back to Dashboard</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );

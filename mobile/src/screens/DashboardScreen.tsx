@@ -11,6 +11,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useMobileData } from '../context/MobileDataContext';
+import { useAuth } from '../hooks/useAuth';
 import { AnandHomesMobileLogo } from '../components/AnandHomesMobileLogo';
 import { MobileStockBarChart } from '../components/MobileStockBarChart';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,18 +19,22 @@ import { Ionicons } from '@expo/vector-icons';
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 
 export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
+  const { user } = useAuth();
   const {
     roleMode,
     setRoleMode,
     toggleRole,
     selectedSite,
+    setSelectedSite,
     sites,
+    myAssignedSites,
     inventory,
     photos,
     activities,
     lowStockAlerts,
     materialRequests,
     deliveries,
+    refreshData,
   } = useMobileData();
 
   const totalStockValue = sites.reduce((sum, s) => sum + (s.stockValue || 0), 0);
@@ -42,6 +47,19 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   const pendingRequestsCount = materialRequests.filter((r) => r.status === 'Pending').length;
   const activeDeliveriesCount = deliveries.filter((d) => d.status === 'In Transit' || d.status === 'Expected').length;
+
+  // Supervisor active assigned site
+  const myAssignedSite =
+    myAssignedSites.find((s) => s.name === selectedSite) ||
+    myAssignedSites[0] ||
+    null;
+
+  const siteName = myAssignedSite ? myAssignedSite.name : '';
+  const supervisorInventory = siteName ? inventory.filter((i) => i.site === siteName) : [];
+  const supervisorAlerts = siteName ? lowStockAlerts.filter((a) => a.site === siteName) : [];
+  const supervisorRequests = siteName ? materialRequests.filter((r) => r.site === siteName) : [];
+  const supervisorPendingRequests = supervisorRequests.filter((r) => r.status === 'Pending').length;
+  const supervisorStockValue = myAssignedSite?.stockValueFormatted || (myAssignedSite ? '₹0' : '—');
 
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const adminBarData = days.map((day) => ({ day, stockIn: 0, stockOut: 0 }));
@@ -226,84 +244,110 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </>
-        ) : (
-          /* =================================================================== */
-          /* SUPERVISOR MOBILE VIEW (Image 4 Screen 2) */
-          /* =================================================================== */
-          <>
-            <View style={styles.greetingRow}>
-              <View>
-                <Text style={styles.greetingSmall}>Hello, Supervisor 👋</Text>
-                <Text style={styles.greetingBig}>Good Morning!</Text>
-              </View>
-
-              <View style={styles.siteStatusBadge}>
-                <View style={styles.activeGreenDot} />
-                <Text style={styles.siteStatusText}>{selectedSite}</Text>
-              </View>
-            </View>
-
-            {/* Weather Widget */}
-            <View style={styles.weatherCard}>
-              <View style={styles.weatherMain}>
-                <Ionicons name="partly-sunny" size={28} color="#F59E0B" />
-                <View style={{ marginLeft: 10 }}>
-                  <Text style={styles.weatherTemp}>28°C</Text>
-                  <Text style={styles.weatherDesc}>Partly Cloudy</Text>
+        ) : !myAssignedSite ? (
+          <View style={styles.unassignedCard}>
+                <View style={styles.unassignedIconBox}>
+                  <Ionicons name="alert-circle" size={36} color="#D97706" />
                 </View>
+                <Text style={styles.unassignedTitle}>No Project Site Assigned Yet</Text>
+                <Text style={styles.unassignedText}>
+                  Your supervisor account ({user?.email || 'this profile'}) is not currently linked to an active construction site.
+                  {'\n\n'}Please contact an administrator to assign a site to you in the Sites directory.
+                </Text>
+                <TouchableOpacity style={styles.unassignedBtn} onPress={() => refreshData()}>
+                  <Ionicons name="refresh-outline" size={16} color="#FFFFFF" />
+                  <Text style={styles.unassignedBtnText}>Refresh Status</Text>
+                </TouchableOpacity>
               </View>
+            ) : (
+              <>
+                <View style={styles.greetingRow}>
+                  <View>
+                    <Text style={styles.greetingSmall}>Hello, {user?.name || 'Supervisor'} 👋</Text>
+                    <Text style={styles.greetingBig}>{myAssignedSite.name}</Text>
+                  </View>
 
-              <View style={styles.weatherStats}>
-                <Text style={styles.weatherStatItem}>💧 Humidity: 62%</Text>
-                <Text style={styles.weatherStatItem}>💨 Wind: 12 km/h</Text>
-                <Text style={styles.weatherStatItem}>🌧️ Rain: 0%</Text>
-              </View>
-            </View>
-
-            {/* 4 KPI Cards (Materials, Stock Value, Low Stock, Pending Requests) */}
-            <View style={styles.kpiGrid}>
-              <View style={styles.kpiCard}>
-                <Text style={styles.kpiLabel}>Total Materials</Text>
-                <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>{inventory.length}</Text>
-                  <Ionicons name="cube" size={16} color="#0D5C3A" />
+                  {myAssignedSites.length > 1 ? (
+                    <TouchableOpacity
+                      style={styles.siteStatusBadge}
+                      onPress={() => {
+                        const currentIndex = myAssignedSites.findIndex((s) => s.name === siteName);
+                        const nextSite = myAssignedSites[(currentIndex + 1) % myAssignedSites.length];
+                        setSelectedSite(nextSite.name);
+                      }}
+                    >
+                      <View style={styles.activeGreenDot} />
+                      <Text style={styles.siteStatusText}>{siteName} ▾</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.siteStatusBadge}>
+                      <View style={styles.activeGreenDot} />
+                      <Text style={styles.siteStatusText}>{siteName}</Text>
+                    </View>
+                  )}
                 </View>
-              </View>
 
-              <View style={styles.kpiCard}>
-                <Text style={styles.kpiLabel}>Stock Value</Text>
-                <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>{formattedStockValue}</Text>
-                  <Ionicons name="cash" size={16} color="#D97706" />
-                </View>
-              </View>
+                {/* Weather Widget */}
+                <View style={styles.weatherCard}>
+                  <View style={styles.weatherMain}>
+                    <Ionicons name="partly-sunny" size={28} color="#F59E0B" />
+                    <View style={{ marginLeft: 10 }}>
+                      <Text style={styles.weatherTemp}>28°C</Text>
+                      <Text style={styles.weatherDesc}>Partly Cloudy</Text>
+                    </View>
+                  </View>
 
-              <TouchableOpacity
-                style={styles.kpiCard}
-                onPress={() => navigation.navigate('LowStockAlert')}
-              >
-                <Text style={styles.kpiLabel}>Low Stock Items</Text>
-                <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>
-                    {lowStockAlerts.length.toString().padStart(2, '0')}
-                  </Text>
-                  <Ionicons name="warning" size={16} color="#E11D48" />
+                  <View style={styles.weatherStats}>
+                    <Text style={styles.weatherStatItem}>💧 Humidity: 62%</Text>
+                    <Text style={styles.weatherStatItem}>💨 Wind: 12 km/h</Text>
+                    <Text style={styles.weatherStatItem}>🌧️ Rain: 0%</Text>
+                  </View>
                 </View>
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.kpiCard}
-                onPress={() => navigation.navigate('MaterialRequests')}
-              >
-                <Text style={styles.kpiLabel}>Pending Requests</Text>
-                <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>
-                    {pendingRequestsCount.toString().padStart(2, '0')}
-                  </Text>
-                  <Ionicons name="document-text" size={16} color="#2563EB" />
+                {/* 4 KPI Cards (Materials, Stock Value, Low Stock, Pending Requests) */}
+                <View style={styles.kpiGrid}>
+                  <View style={styles.kpiCard}>
+                    <Text style={styles.kpiLabel}>Total Materials</Text>
+                    <View style={styles.kpiValueRow}>
+                      <Text style={styles.kpiValue}>{supervisorInventory.length}</Text>
+                      <Ionicons name="cube" size={16} color="#0D5C3A" />
+                    </View>
+                  </View>
+
+                  <View style={styles.kpiCard}>
+                    <Text style={styles.kpiLabel}>Stock Value</Text>
+                    <View style={styles.kpiValueRow}>
+                      <Text style={styles.kpiValue}>{supervisorStockValue}</Text>
+                      <Ionicons name="cash" size={16} color="#D97706" />
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.kpiCard}
+                    onPress={() => navigation.navigate('LowStockAlert')}
+                  >
+                    <Text style={styles.kpiLabel}>Low Stock Items</Text>
+                    <View style={styles.kpiValueRow}>
+                      <Text style={styles.kpiValue}>
+                        {supervisorAlerts.length.toString().padStart(2, '0')}
+                      </Text>
+                      <Ionicons name="warning" size={16} color="#E11D48" />
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.kpiCard}
+                    onPress={() => navigation.navigate('MaterialRequests')}
+                  >
+                    <Text style={styles.kpiLabel}>Pending Requests</Text>
+                    <View style={styles.kpiValueRow}>
+                      <Text style={styles.kpiValue}>
+                        {supervisorPendingRequests.toString().padStart(2, '0')}
+                      </Text>
+                      <Ionicons name="document-text" size={16} color="#2563EB" />
+                    </View>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-            </View>
 
             {/* Stock Overview Bar Chart */}
             <MobileStockBarChart data={supervisorBarData} stockOutColor="#DC2626" />
@@ -676,5 +720,52 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#64748B',
+  },
+  unassignedCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    borderStyle: 'dashed',
+    marginVertical: 16,
+  },
+  unassignedIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  unassignedTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#92400E',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  unassignedText: {
+    fontSize: 12,
+    color: '#B45309',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  unassignedBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0D5C3A',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  unassignedBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

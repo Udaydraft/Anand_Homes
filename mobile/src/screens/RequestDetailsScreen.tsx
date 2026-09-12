@@ -19,8 +19,41 @@ export const RequestDetailsScreen: React.FC<Props> = ({ route, navigation }) => 
   const { roleMode, materialRequests, approveRequest, rejectRequest, cancelRequest } = useMobileData();
 
   const req =
-    materialRequests.find((r) => r.requestId === requestId || r.id === requestId) ||
-    materialRequests[0];
+    materialRequests.find((r) => r.requestId === requestId || r.id === requestId) || null;
+
+  if (!req) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={20} color="#1E293B" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Request Details</Text>
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <Ionicons name="document-text-outline" size={48} color="#94A3B8" />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginTop: 12 }}>
+            Request Not Found
+          </Text>
+          <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 6 }}>
+            The requested material indent could not be located.
+          </Text>
+          <TouchableOpacity
+            style={{
+              marginTop: 16,
+              backgroundColor: '#0D5C3A',
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 8,
+            }}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 12 }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
