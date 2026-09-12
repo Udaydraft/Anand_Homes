@@ -21,12 +21,22 @@ import { Ionicons } from '@expo/vector-icons';
 type Props = NativeStackScreenProps<RootStackParamList, 'Sites'>;
 
 export const SitesScreen: React.FC<Props> = ({ navigation }) => {
-  const { sites, myAssignedSites, roleMode, updateSite, setSelectedSite } = useMobileData();
+  const { sites, myAssignedSites, roleMode, updateSite, addSite, setSelectedSite } = useMobileData();
   const [search, setSearch] = useState('');
   const [supervisors, setSupervisors] = useState<User[]>([]);
   const [assigningSite, setAssigningSite] = useState<Site | null>(null);
   const [selectedSupervisor, setSelectedSupervisor] = useState<User | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
+
+  // Create Site Modal State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newSiteName, setNewSiteName] = useState('');
+  const [newSiteCode, setNewSiteCode] = useState('');
+  const [newSiteLocation, setNewSiteLocation] = useState('');
+  const [newSiteType, setNewSiteType] = useState('Residential Construction');
+  const [newSiteContact, setNewSiteContact] = useState('+91 98765 43210');
+  const [newSiteSupervisor, setNewSiteSupervisor] = useState<User | null>(null);
+  const [isCreatingSite, setIsCreatingSite] = useState(false);
 
   useEffect(() => {
     if (roleMode === 'admin') {
@@ -74,6 +84,32 @@ export const SitesScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const handleCreateSite = async () => {
+    if (!newSiteName.trim() || !newSiteLocation.trim()) return;
+    setIsCreatingSite(true);
+    try {
+      await addSite({
+        name: newSiteName.trim(),
+        code: newSiteCode.trim() || `RBL-S-00${sites.length + 1}`,
+        location: newSiteLocation.trim(),
+        projectType: newSiteType.trim() || 'Residential Construction',
+        supervisor: newSiteSupervisor ? newSiteSupervisor.name : 'Unassigned',
+        supervisorId: newSiteSupervisor ? newSiteSupervisor.id : undefined,
+        supervisorEmail: newSiteSupervisor ? newSiteSupervisor.email : undefined,
+        status: 'Active',
+        contact: newSiteContact.trim() || '+91 98765 43210',
+      });
+      setShowCreateModal(false);
+      setNewSiteName('');
+      setNewSiteCode('');
+      setNewSiteLocation('');
+      setNewSiteSupervisor(null);
+      setNewSiteContact('+91 98765 43210');
+    } finally {
+      setIsCreatingSite(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Top Header */}
@@ -84,7 +120,20 @@ export const SitesScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.headerTitle}>
           {roleMode === 'supervisor' ? 'My Assigned Sites' : 'Sites / Projects'}
         </Text>
-        <View style={{ width: 32 }} />
+        {roleMode === 'admin' ? (
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => {
+              setNewSiteCode(`RBL-S-00${sites.length + 1}`);
+              setShowCreateModal(true);
+            }}
+          >
+            <Ionicons name="add" size={14} color="#FFFFFF" />
+            <Text style={styles.addBtnText}>Add Site</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 32 }} />
+        )}
       </View>
 
       {/* Search & Filter Bar */}
@@ -279,6 +328,133 @@ export const SitesScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </Modal>
       )}
+
+      {/* Create Site Modal (Admin only) */}
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalBox, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Create New Project Site</Text>
+                <Text style={styles.modalSub}>Add a new construction site to manage</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.inputLabel}>Site Name *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Greenfields Phase 2"
+                placeholderTextColor="#94A3B8"
+                value={newSiteName}
+                onChangeText={setNewSiteName}
+              />
+
+              <Text style={styles.inputLabel}>Site Code</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. RBL-S-005"
+                placeholderTextColor="#94A3B8"
+                value={newSiteCode}
+                onChangeText={setNewSiteCode}
+              />
+
+              <Text style={styles.inputLabel}>Location / Address *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Tambaram, Chennai"
+                placeholderTextColor="#94A3B8"
+                value={newSiteLocation}
+                onChangeText={setNewSiteLocation}
+              />
+
+              <Text style={styles.inputLabel}>Project Type</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Residential Construction"
+                placeholderTextColor="#94A3B8"
+                value={newSiteType}
+                onChangeText={setNewSiteType}
+              />
+
+              <Text style={styles.inputLabel}>Site Contact Phone</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="+91 98765 43210"
+                placeholderTextColor="#94A3B8"
+                value={newSiteContact}
+                onChangeText={setNewSiteContact}
+              />
+
+              <Text style={styles.inputLabel}>Assign Supervisor</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.supPill,
+                    !newSiteSupervisor && styles.supPillActive,
+                  ]}
+                  onPress={() => setNewSiteSupervisor(null)}
+                >
+                  <Text style={[styles.supPillText, !newSiteSupervisor && styles.supPillTextActive]}>
+                    Unassigned
+                  </Text>
+                </TouchableOpacity>
+                {supervisors.map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[
+                      styles.supPill,
+                      newSiteSupervisor?.id === s.id && styles.supPillActive,
+                    ]}
+                    onPress={() => setNewSiteSupervisor(s)}
+                  >
+                    <Text
+                      style={[
+                        styles.supPillText,
+                        newSiteSupervisor?.id === s.id && styles.supPillTextActive,
+                      ]}
+                    >
+                      {s.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowCreateModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalSubmitBtn,
+                  (!newSiteName.trim() || !newSiteLocation.trim() || isCreatingSite) && { opacity: 0.6 },
+                ]}
+                disabled={!newSiteName.trim() || !newSiteLocation.trim() || isCreatingSite}
+                onPress={handleCreateSite}
+              >
+                {isCreatingSite ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Create Site</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -560,5 +736,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#1E293B',
+    backgroundColor: '#F8FAFC',
+  },
+  supPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  supPillActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#0D5C3A',
+  },
+  supPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  supPillTextActive: {
+    color: '#0D5C3A',
+    fontWeight: '700',
   },
 });

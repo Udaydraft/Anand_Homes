@@ -17,7 +17,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DeliveryDetails'>;
 
 export const DeliveryDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
   const { deliveryId } = route.params;
-  const { deliveries } = useMobileData();
+  const { deliveries, updateDeliveryStatus } = useMobileData();
 
   const dlv = deliveries.find((d) => d.deliveryId === deliveryId || d.id === deliveryId) || null;
 
@@ -141,6 +141,19 @@ export const DeliveryDetailsScreen: React.FC<Props> = ({ route, navigation }) =>
             </View>
           </View>
         </View>
+
+        {dlv.status !== 'Received' && dlv.status !== 'Cancelled' && (
+          <TouchableOpacity
+            style={styles.receiveBtn}
+            onPress={async () => {
+              await updateDeliveryStatus(dlv.id, 'Received');
+              navigation.goBack();
+            }}
+          >
+            <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
+            <Text style={styles.receiveBtnText}>Mark as Received & Verified</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -258,5 +271,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  receiveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#0D5C3A',
+    borderRadius: 10,
+    paddingVertical: 14,
+    marginTop: 16,
+    marginBottom: 30,
+  },
+  receiveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

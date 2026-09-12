@@ -134,6 +134,15 @@ export const constructionService = {
     return res.data.data;
   },
 
+  async updateDelivery(id: string, data: Partial<Delivery>): Promise<Delivery> {
+    const res = await apiClient.put<ApiResponse<Delivery>>(`/deliveries/${id}`, data);
+    return res.data.data;
+  },
+
+  async deleteDelivery(id: string): Promise<void> {
+    await apiClient.delete<ApiResponse<any>>(`/deliveries/${id}`);
+  },
+
   // Photos
   async getPhotos(site?: string, type?: string): Promise<SitePhoto[]> {
     const params: Record<string, string> = {};

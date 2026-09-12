@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 type Props = NativeStackScreenProps<RootStackParamList, 'MoreMenu'>;
 
 export const MoreMenuScreen: React.FC<Props> = ({ navigation }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { roleMode, toggleRole } = useMobileData();
 
   const menuItems: {
@@ -81,7 +81,10 @@ export const MoreMenuScreen: React.FC<Props> = ({ navigation }) => {
         {/* Logout */}
         <TouchableOpacity
           style={styles.logoutBtn}
-          onPress={() => navigation.navigate('Login')}
+          onPress={() => {
+            logout();
+            navigation.navigate('Login');
+          }}
         >
           <Ionicons name="log-out-outline" size={18} color="#DC2626" />
           <Text style={styles.logoutText}>Logout</Text>

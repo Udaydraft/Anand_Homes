@@ -61,6 +61,16 @@ interface MobileDataContextType {
   rejectRequest: (id: string) => Promise<void>;
   cancelRequest: (id: string) => Promise<void>;
   updateSite: (id: string, site: Partial<Site>) => Promise<void>;
+  addSite: (site: Partial<Site>) => Promise<void>;
+  deleteSite: (id: string) => Promise<void>;
+  uploadPhoto: (data: {
+    title: string;
+    site: string;
+    type: 'Stock In' | 'Stock Out' | 'Site Progress';
+    imageUrl: string;
+    uploader?: string;
+  }) => Promise<void>;
+  updateDeliveryStatus: (id: string, status: Delivery['status']) => Promise<void>;
 }
 
 const MobileDataContext = createContext<MobileDataContextType | undefined>(undefined);
@@ -280,6 +290,85 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
+  const addSite = async (siteData: Partial<Site>) => {
+    try {
+      await constructionService.createSite(siteData);
+      await refreshData();
+    } catch (e) {
+      console.warn('Mobile addSite fallback:', e);
+      const newSite: Site = {
+        id: `s-${Date.now()}`,
+        code: siteData.code || `RBL-S-00${sites.length + 1}`,
+        name: siteData.name || 'New Site',
+        location: siteData.location || 'Tamil Nadu',
+        supervisor: siteData.supervisor || 'Unassigned',
+        supervisorId: siteData.supervisorId,
+        supervisorEmail: siteData.supervisorEmail,
+        status: siteData.status || 'Active',
+        totalMaterials: siteData.totalMaterials || 0,
+        stockValue: siteData.stockValue || 0,
+        stockValueFormatted: siteData.stockValueFormatted || '₹0',
+        imageUrl: siteData.imageUrl,
+        startDate: siteData.startDate || 'Just now',
+        contact: siteData.contact,
+        projectType: siteData.projectType || 'Residential Construction',
+      };
+      setSites((prev) => [...prev, newSite]);
+    }
+  };
+
+  const deleteSite = async (id: string) => {
+    try {
+      await constructionService.deleteSite(id);
+      setSites((prev) => prev.filter((s) => s.id !== id));
+      await refreshData();
+    } catch (e) {
+      console.warn('Mobile deleteSite fallback:', e);
+      setSites((prev) => prev.filter((s) => s.id !== id));
+    }
+  };
+
+  const uploadPhoto = async (data: {
+    title: string;
+    site: string;
+    type: 'Stock In' | 'Stock Out' | 'Site Progress';
+    imageUrl: string;
+    uploader?: string;
+  }) => {
+    const uploaderName = data.uploader || user?.name || (roleMode === 'admin' ? 'Admin User' : 'Site Supervisor');
+    try {
+      await constructionService.uploadPhoto({
+        ...data,
+        uploader: uploaderName,
+      });
+      await refreshData();
+    } catch (e) {
+      console.warn('Mobile uploadPhoto fallback:', e);
+      const newPhoto: SitePhoto = {
+        id: `p-${Date.now()}`,
+        title: data.title,
+        site: data.site,
+        type: data.type,
+        timestamp: 'Just now',
+        imageUrl: data.imageUrl,
+        uploader: uploaderName,
+      };
+      setPhotos((prev) => [newPhoto, ...prev]);
+    }
+  };
+
+  const updateDeliveryStatus = async (id: string, status: Delivery['status']) => {
+    try {
+      await constructionService.updateDelivery(id, { status });
+      await refreshData();
+    } catch (e) {
+      console.warn('Mobile updateDelivery fallback:', e);
+      setDeliveries((prev) =>
+        prev.map((d) => (d.id === id || d.deliveryId === id ? { ...d, status } : d))
+      );
+    }
+  };
+
   return (
     <MobileDataContext.Provider
       value={{
@@ -305,6 +394,10 @@ export const MobileDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         rejectRequest,
         cancelRequest,
         updateSite,
+        addSite,
+        deleteSite,
+        uploadPhoto,
+        updateDeliveryStatus,
       }}
     >
       {children}

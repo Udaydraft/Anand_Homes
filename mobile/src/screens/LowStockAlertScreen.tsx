@@ -15,7 +15,14 @@ import { Ionicons } from '@expo/vector-icons';
 type Props = NativeStackScreenProps<RootStackParamList, 'LowStockAlert'>;
 
 export const LowStockAlertScreen: React.FC<Props> = ({ navigation }) => {
-  const { lowStockAlerts } = useMobileData();
+  const { lowStockAlerts, myAssignedSites, roleMode } = useMobileData();
+
+  const alerts =
+    roleMode === 'supervisor'
+      ? lowStockAlerts.filter((a) => myAssignedSites.some((s) => s.name === a.site))
+      : lowStockAlerts;
+
+  const countFormatted = alerts.length.toString().padStart(2, '0');
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -29,16 +36,28 @@ export const LowStockAlertScreen: React.FC<Props> = ({ navigation }) => {
 
       <ScrollView style={styles.content}>
         {/* Warning Banner */}
-        <View style={styles.alertBanner}>
-          <Ionicons name="warning" size={20} color="#E11D48" />
-          <View style={{ flex: 1, marginLeft: 8 }}>
-            <Text style={styles.bannerTitle}>07 items are below minimum level</Text>
-            <Text style={styles.bannerSub}>Immediate requisition needed to avoid work halts</Text>
+        {alerts.length > 0 ? (
+          <View style={styles.alertBanner}>
+            <Ionicons name="warning" size={20} color="#E11D48" />
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={styles.bannerTitle}>{countFormatted} items are below minimum level</Text>
+              <Text style={styles.bannerSub}>Immediate requisition needed to avoid work halts</Text>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={[styles.alertBanner, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
+            <Ionicons name="checkmark-circle" size={20} color="#0D5C3A" />
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={[styles.bannerTitle, { color: '#065F46' }]}>All Stock Levels Normal</Text>
+              <Text style={[styles.bannerSub, { color: '#047857' }]}>
+                No materials currently breach designated minimum safety buffers
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Low Stock Items List */}
-        {lowStockAlerts.map((item) => (
+        {alerts.map((item) => (
           <View key={item.id} style={styles.itemCard}>
             <View style={styles.cardHeader}>
               <Text style={styles.matName}>{item.material}</Text>

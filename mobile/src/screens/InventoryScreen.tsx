@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,16 +16,44 @@ import { Ionicons } from '@expo/vector-icons';
 type Props = NativeStackScreenProps<RootStackParamList, 'Inventory'>;
 
 export const InventoryScreen: React.FC<Props> = ({ navigation }) => {
-  const { inventory } = useMobileData();
+  const { inventory, sites, myAssignedSites, roleMode } = useMobileData();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
 
-  const categories = ['All', 'Cement', 'Steel', 'Aggregate', 'Masonry', 'Finishing'];
+  const availableSites = roleMode === 'supervisor' ? myAssignedSites : sites;
+  const [selectedSiteFilter, setSelectedSiteFilter] = useState<string>(
+    roleMode === 'supervisor' ? availableSites[0]?.name || '' : 'All Sites'
+  );
 
-  const filtered = inventory.filter((item) => {
+  useEffect(() => {
+    if (roleMode === 'supervisor') {
+      if (availableSites.length > 0 && (!selectedSiteFilter || selectedSiteFilter === 'All Sites')) {
+        setSelectedSiteFilter(availableSites[0].name);
+      }
+    }
+  }, [roleMode, availableSites]);
+
+  const categories = ['All', 'Cement', 'Steel', 'Aggregate', 'Masonry', 'Finishing', 'Electrical', 'Plumbing'];
+
+  const siteOptions =
+    roleMode === 'supervisor'
+      ? availableSites.map((s) => s.name)
+      : ['All Sites', ...sites.map((s) => s.name)];
+
+  const baseItems =
+    roleMode === 'supervisor'
+      ? inventory.filter((item) => myAssignedSites.some((s) => s.name === item.site))
+      : inventory;
+
+  const filtered = baseItems.filter((item) => {
     const matchCat = category === 'All' || item.category === category;
-    const matchSearch = item.name.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
+    const matchSite =
+      selectedSiteFilter === 'All Sites' || item.site === selectedSiteFilter;
+    const matchSearch =
+      item.name.toLowerCase().includes(search.toLowerCase()) ||
+      item.category.toLowerCase().includes(search.toLowerCase()) ||
+      item.site.toLowerCase().includes(search.toLowerCase());
+    return matchCat && matchSite && matchSearch;
   });
 
   return (
@@ -35,8 +63,38 @@ export const InventoryScreen: React.FC<Props> = ({ navigation }) => {
           <Ionicons name="arrow-back" size={20} color="#1E293B" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Inventory</Text>
-        <View style={{ width: 28 }} />
+        <TouchableOpacity
+          style={styles.stockInBtn}
+          onPress={() => navigation.navigate('StockIn')}
+        >
+          <Ionicons name="add" size={14} color="#FFFFFF" />
+          <Text style={styles.stockInBtnText}>Stock In</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Site Filter Horizontal Scroll */}
+      {siteOptions.length > 0 && (
+        <View style={styles.siteFilterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.siteScroll}>
+            {siteOptions.map((s) => (
+              <TouchableOpacity
+                key={s}
+                onPress={() => setSelectedSiteFilter(s)}
+                style={[styles.sitePill, selectedSiteFilter === s && styles.sitePillActive]}
+              >
+                <Ionicons
+                  name="business-outline"
+                  size={12}
+                  color={selectedSiteFilter === s ? '#0D5C3A' : '#64748B'}
+                />
+                <Text style={[styles.sitePillText, selectedSiteFilter === s && styles.sitePillTextActive]}>
+                  {s}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Search Input */}
       <View style={styles.searchContainer}>
@@ -45,7 +103,7 @@ export const InventoryScreen: React.FC<Props> = ({ navigation }) => {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search material..."
+            placeholder="Search material, brand, site..."
             placeholderTextColor="#94A3B8"
             style={styles.searchInput}
           />
@@ -69,45 +127,64 @@ export const InventoryScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Inventory Items List */}
       <ScrollView style={styles.list}>
-        {filtered.map((item) => (
-          <View key={item.id} style={styles.itemRow}>
-            <View style={styles.itemLeft}>
-              <View style={styles.iconBox}>
-                <Ionicons name="cube-outline" size={18} color="#0D5C3A" />
-              </View>
-              <View>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemSub}>
-                  {item.totalStock} {item.unit} &bull; {item.category}
-                </Text>
-              </View>
-            </View>
-
-            <View
-              style={[
-                styles.badge,
-                item.status === 'Good'
-                  ? styles.badgeGood
-                  : item.status === 'Medium'
-                  ? styles.badgeMed
-                  : styles.badgeLow,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.badgeText,
-                  item.status === 'Good'
-                    ? styles.badgeTextGood
-                    : item.status === 'Medium'
-                    ? styles.badgeTextMed
-                    : styles.badgeTextLow,
-                ]}
-              >
-                {item.status}
-              </Text>
-            </View>
+        {filtered.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="cube-outline" size={42} color="#94A3B8" />
+            <Text style={styles.emptyTitle}>No Inventory Items</Text>
+            <Text style={styles.emptySub}>
+              {roleMode === 'supervisor' && availableSites.length === 0
+                ? 'No project site is assigned to your account.'
+                : 'No materials found matching your category or site filter.'}
+            </Text>
           </View>
-        ))}
+        ) : (
+          filtered.map((item) => (
+            <View key={item.id} style={styles.itemRow}>
+              <View style={styles.itemLeft}>
+                <View style={styles.iconBox}>
+                  <Ionicons name="cube-outline" size={18} color="#0D5C3A" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemSub}>
+                    {item.totalStock} {item.unit} &bull; {item.category}
+                  </Text>
+                  <Text style={styles.itemSite}>Site: {item.site}</Text>
+                </View>
+              </View>
+
+              <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                <View
+                  style={[
+                    styles.badge,
+                    item.status === 'Good'
+                      ? styles.badgeGood
+                      : item.status === 'Medium'
+                      ? styles.badgeMed
+                      : styles.badgeLow,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.badgeText,
+                      item.status === 'Good'
+                        ? styles.badgeTextGood
+                        : item.status === 'Medium'
+                        ? styles.badgeTextMed
+                        : styles.badgeTextLow,
+                    ]}
+                  >
+                    {item.status}
+                  </Text>
+                </View>
+
+                {item.minStock && (
+                  <Text style={styles.minStockText}>Min: {item.minStock} {item.unit}</Text>
+                )}
+              </View>
+            </View>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -247,5 +324,81 @@ const styles = StyleSheet.create({
   },
   badgeTextLow: {
     color: '#E11D48',
+  },
+  stockInBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#0D5C3A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  stockInBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  siteFilterContainer: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  siteScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  sitePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  sitePillActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#0D5C3A',
+  },
+  sitePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  sitePillTextActive: {
+    color: '#0D5C3A',
+    fontWeight: '700',
+  },
+  itemSite: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  minStockText: {
+    fontSize: 9,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  emptyBox: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 12,
+  },
+  emptySub: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
   },
 });
