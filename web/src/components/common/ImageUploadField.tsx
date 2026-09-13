@@ -43,15 +43,10 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         ? res.url
         : res.url.startsWith('/') ? res.url : `/${res.url}`;
       onChange(fullUrl);
-    } catch (err) {
-      console.warn('Backend file upload fallback to base64:', err);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          onChange(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('File upload failed:', err);
+      const msg = err.response?.data?.detail || 'Failed to upload photo. Please check your network or try another image.';
+      setError(msg);
     } finally {
       setIsUploading(false);
     }

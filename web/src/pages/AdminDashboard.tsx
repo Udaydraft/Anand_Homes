@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDashboardContext } from '../context/DashboardContext';
 import { StockBarChart } from '../components/StockBarChart';
 import { EmptyState } from '../components/common/EmptyState';
 import { ImageUploadField } from '../components/common/ImageUploadField';
+import { userService } from '../services/user.service';
 import {
   Building2,
   Package,
@@ -45,15 +46,30 @@ export const AdminDashboard: React.FC = () => {
     isLoadingData,
   } = useDashboardContext();
 
+  const [supervisors, setSupervisors] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [newSite, setNewSite] = useState({
     name: '',
     code: '',
     location: '',
-    supervisor: 'Rajesh Kumar',
+    supervisor: '',
     projectType: 'Residential Project',
     imageUrl: '',
   });
+
+  useEffect(() => {
+    userService
+      .listUsers('supervisor')
+      .then((res) => {
+        if (Array.isArray(res)) {
+          setSupervisors(res.map((u) => ({ id: u.id, name: u.name, email: u.email })));
+          if (res.length > 0 && !newSite.supervisor) {
+            setNewSite((prev) => ({ ...prev, supervisor: res[0].name }));
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const userName = user?.name || 'Admin';
 
@@ -73,13 +89,23 @@ export const AdminDashboard: React.FC = () => {
   const activeDeliveries = deliveries.filter((d) => d.status === 'In Transit' || d.status === 'Expected');
   const isSystemEmpty = totalSitesCount === 0 && totalMaterialsCount === 0;
 
-  // Chart data
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const chartBarData = days.map((day) => ({
-    day,
-    stockIn: activities.filter((a) => a.type === 'stock_in').length > 0 ? 25 : 0,
-    stockOut: activities.filter((a) => a.type === 'stock_out').length > 0 ? 18 : 0,
-  }));
+  // Real weekly stock movement chart data based on actual logged activities
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const chartDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const chartBarData = chartDays.map((day) => {
+    const dayActs = activities.filter((act) => {
+      const timeVal = act.time || (act as any).timestamp;
+      if (!timeVal) return false;
+      const d = new Date(timeVal);
+      if (isNaN(d.getTime())) return false;
+      return dayLabels[d.getDay()] === day;
+    });
+    return {
+      day,
+      stockIn: dayActs.filter((a) => a.type === 'stock_in').length,
+      stockOut: dayActs.filter((a) => a.type === 'stock_out').length,
+    };
+  });
 
   const handleCreateSiteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +114,7 @@ export const AdminDashboard: React.FC = () => {
       name: newSite.name,
       code: newSite.code || `RBL-S-00${sites.length + 1}`,
       location: newSite.location,
-      supervisor: newSite.supervisor,
+      supervisor: newSite.supervisor || (supervisors[0]?.name || 'Unassigned'),
       projectType: newSite.projectType,
       status: 'Active',
       totalMaterials: 0,
@@ -100,7 +126,7 @@ export const AdminDashboard: React.FC = () => {
       name: '',
       code: '',
       location: '',
-      supervisor: 'Rajesh Kumar',
+      supervisor: supervisors[0]?.name || '',
       projectType: 'Residential Project',
       imageUrl: '',
     });
@@ -558,14 +584,19 @@ export const AdminDashboard: React.FC = () => {
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Assigned Site Supervisor</label>
-                <input
-                  type="text"
-                  required
+                <select
                   value={newSite.supervisor}
                   onChange={(e) => setNewSite({ ...newSite, supervisor: e.target.value })}
-                  placeholder="e.g. Rajesh Kumar"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
-                />
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-[#0D5C3A] text-slate-900 font-medium"
+                >
+                  <option value="">-- Select Supervisor --</option>
+                  {supervisors.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name} ({s.email})
+                    </option>
+                  ))}
+                  <option value="Unassigned">Unassigned</option>
+                </select>
               </div>
 
               <div>

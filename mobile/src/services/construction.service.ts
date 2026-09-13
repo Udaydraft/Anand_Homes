@@ -176,4 +176,14 @@ export const constructionService = {
     const res = await apiClient.get<ApiResponse<DashboardSummary>>('/dashboard/summary', { params });
     return res.data.data;
   },
+
+  // File / Photo Binary Upload to Backend
+  async uploadFile(formData: FormData): Promise<string> {
+    const res = await apiClient.post<ApiResponse<{ url: string; filename: string }>>('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data.data.url;
+  },
 };

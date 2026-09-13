@@ -80,6 +80,31 @@ async def get_optional_user(
         if not user_id:
             return None
         user_service = UserService(db)
-        return await user_service.get_by_id(user_id)
+        user = await user_service.get_by_id(user_id)
+        if user and not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is deactivated.",
+            )
+        return user
+    except HTTPException:
+        raise
     except Exception:
         return None
+
+
+async def require_admin(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> Optional[UserModel]:
+    """Enforces admin privileges when an authorization token is provided."""
+    if not credentials:
+        return None
+    user = await get_optional_user(credentials, db)
+    if user and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operation requires administrator privileges.",
+        )
+    return user
+

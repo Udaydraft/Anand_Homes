@@ -53,8 +53,10 @@ export const StockOutPage: React.FC = () => {
     (i) => i.name.toLowerCase() === material.toLowerCase() && i.site === site
   );
   const availableStock = currentItem ? currentItem.totalStock : 0;
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleFileProcess = async (file: File) => {
+    setUploadError(null);
     try {
       setIsUploading(true);
       const res = await constructionService.uploadPhotoFile(file);
@@ -62,9 +64,11 @@ export const StockOutPage: React.FC = () => {
         ? res.url
         : res.url.startsWith('/') ? res.url : `/${res.url}`;
       setUploadedFile(fullUrl);
-    } catch (err) {
-      console.warn('Backend file upload fallback:', err);
-      setUploadedFile(URL.createObjectURL(file));
+    } catch (err: any) {
+      console.error('Backend file upload failed:', err);
+      const msg = err.response?.data?.detail || 'Failed to upload file to server. Please try a standard JPG/PNG file.';
+      setUploadError(msg);
+      setUploadedFile(null);
     } finally {
       setIsUploading(false);
     }
@@ -393,6 +397,7 @@ export const StockOutPage: React.FC = () => {
                   </>
                 )}
               </div>
+              {uploadError && <p className="text-xs text-rose-600 font-semibold mt-2">{uploadError}</p>}
 
               {/* Action Buttons */}
               <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100">

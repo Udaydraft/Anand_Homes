@@ -1,3 +1,5 @@
+import csv
+import io
 import logging
 import re
 import uuid
@@ -770,3 +772,313 @@ class ConstructionService:
     async def seed_database_if_empty(self) -> None:
         """Clean start - no dummy data is seeded."""
         logger.info("Database initialized cleanly without dummy data.")
+
+    # -----------------------------------------------------------------------
+    # Real-Time Reports Generation & CSV Export
+    # -----------------------------------------------------------------------
+    async def generate_report(
+        self,
+        report_type: str,
+        site: Optional[str] = None,
+        allowed_sites: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Generate structured live report data queried directly from database."""
+        clean_type = (report_type or "").lower().replace("_", "-").strip()
+        generated_at = datetime.now(timezone.utc).isoformat()
+
+        if clean_type in ("daily-stock", "stock", "inventory"):
+            items = await self.list_inventory(site, allowed_sites=allowed_sites)
+            headers = [
+                "Material Name",
+                "Category",
+                "Site",
+                "Current Stock",
+                "Unit",
+                "Min Required",
+                "Stock Status",
+                "Est. Unit Price (INR)",
+                "Est. Total Value (INR)",
+            ]
+            rows = []
+            total_val = 0.0
+            pricing_table = {
+                "cement": 380,
+                "steel": 65000,
+                "sand": 2200,
+                "bricks": 9,
+                "paint": 450,
+                "gravel": 1800,
+                "aggregate": 1800,
+                "finishing": 1200,
+                "masonry": 850,
+            }
+            for item in items:
+                cat_key = (item.category or "").lower()
+                unit_price = pricing_table.get(cat_key, 250)
+                item_val = item.totalStock * unit_price
+                total_val += item_val
+                rows.append([
+                    item.name,
+                    item.category,
+                    item.site,
+                    str(item.totalStock),
+                    item.unit,
+                    str(item.minStock),
+                    item.status,
+                    str(unit_price),
+                    str(round(item_val, 2)),
+                ])
+            return {
+                "reportType": "daily-stock",
+                "title": "Daily Stock Summary Report",
+                "generatedAt": generated_at,
+                "site": site or "All Sites",
+                "headers": headers,
+                "rows": rows,
+                "summary": {
+                    "totalItems": len(items),
+                    "totalValuation": round(total_val, 2),
+                    "formattedValuation": _format_inr(total_val),
+                    "lowStockCount": sum(1 for i in items if i.status in ("Low", "Out of Stock")),
+                },
+            }
+
+        elif clean_type in ("material-movement", "inward-outward", "movement"):
+            acts = await self.list_activities(site, limit=500, allowed_sites=allowed_sites)
+            headers = [
+                "Timestamp",
+                "Transaction Type",
+                "Material Item",
+                "Site",
+                "Action Details",
+                "User / Authority",
+            ]
+            rows = []
+            stock_in_count = 0
+            stock_out_count = 0
+            for act in acts:
+                if act.type == "stock_in":
+                    stock_in_count += 1
+                elif act.type == "stock_out":
+                    stock_out_count += 1
+                rows.append([
+                    act.timestamp or "",
+                    "Stock In" if act.type == "stock_in" else "Stock Out" if act.type == "stock_out" else act.type,
+                    act.material or "N/A",
+                    act.site or "N/A",
+                    act.text or "",
+                    act.user or "Site Engineer",
+                ])
+            return {
+                "reportType": "material-movement",
+                "title": "Material Inward & Outward Movement Audit",
+                "generatedAt": generated_at,
+                "site": site or "All Sites",
+                "headers": headers,
+                "rows": rows,
+                "summary": {
+                    "totalTransactions": len(acts),
+                    "stockInCount": stock_in_count,
+                    "stockOutCount": stock_out_count,
+                },
+            }
+
+        elif clean_type in ("consumption-requests", "material-requests", "requests"):
+            reqs = await self.list_requests(site, allowed_sites=allowed_sites)
+            headers = [
+                "Request ID",
+                "Site Name",
+                "Requested Material",
+                "Quantity",
+                "Unit",
+                "Urgency",
+                "Status",
+                "Required Date",
+                "Created Date",
+            ]
+            rows = []
+            for r in reqs:
+                rows.append([
+                    r.id,
+                    r.site,
+                    r.material,
+                    str(r.quantity),
+                    r.unit,
+                    r.urgency,
+                    r.status,
+                    r.requiredDate or "Immediate",
+                    r.createdAt or "",
+                ])
+            return {
+                "reportType": "consumption-requests",
+                "title": "Material Consumption & Indent Requests",
+                "generatedAt": generated_at,
+                "site": site or "All Sites",
+                "headers": headers,
+                "rows": rows,
+                "summary": {
+                    "totalRequests": len(reqs),
+                    "pending": sum(1 for r in reqs if r.status == "Pending"),
+                    "approved": sum(1 for r in reqs if r.status == "Approved"),
+                    "rejected": sum(1 for r in reqs if r.status == "Rejected"),
+                },
+            }
+
+        elif clean_type in ("vendor-deliveries", "deliveries", "vendors"):
+            delivs = await self.list_deliveries(site, allowed_sites=allowed_sites)
+            headers = [
+                "Challan ID",
+                "Supplier / Vendor",
+                "Project Site",
+                "Material",
+                "Expected Qty",
+                "Received Qty",
+                "Unit",
+                "Vehicle No",
+                "Arrival Date",
+                "Status",
+            ]
+            rows = []
+            for d in delivs:
+                rows.append([
+                    d.id,
+                    d.supplier,
+                    d.site,
+                    d.material,
+                    str(d.expectedQty),
+                    str(d.receivedQty),
+                    d.unit,
+                    d.vehicleNo or "N/A",
+                    d.deliveryDate or "",
+                    d.status,
+                ])
+            return {
+                "reportType": "vendor-deliveries",
+                "title": "Vendor Consignments & Delivery Performance",
+                "generatedAt": generated_at,
+                "site": site or "All Sites",
+                "headers": headers,
+                "rows": rows,
+                "summary": {
+                    "totalDeliveries": len(delivs),
+                    "receivedCount": sum(1 for d in delivs if d.status == "Received"),
+                    "inTransitCount": sum(1 for d in delivs if d.status in ("In Transit", "Expected")),
+                },
+            }
+
+        elif clean_type in ("site-valuation", "sites", "valuation"):
+            sites_list = await self.list_sites()
+            if allowed_sites is not None:
+                sites_list = [s for s in sites_list if s.name in allowed_sites]
+            if site and site != "All Sites":
+                sites_list = [s for s in sites_list if s.name == site]
+            headers = [
+                "Site Code",
+                "Site Name",
+                "Location",
+                "Project Classification",
+                "Assigned Supervisor",
+                "Status",
+                "Materials Count",
+                "Estimated Stock Value (INR)",
+            ]
+            rows = []
+            total_val = sum(s.stockValue for s in sites_list)
+            for s in sites_list:
+                rows.append([
+                    s.code,
+                    s.name,
+                    s.location,
+                    s.projectType or "Residential",
+                    s.supervisor or "Unassigned",
+                    s.status,
+                    str(s.totalMaterials),
+                    str(round(s.stockValue, 2)),
+                ])
+            return {
+                "reportType": "site-valuation",
+                "title": "Site-wise Inventory Valuation Breakdown",
+                "generatedAt": generated_at,
+                "site": site or "All Sites",
+                "headers": headers,
+                "rows": rows,
+                "summary": {
+                    "totalSites": len(sites_list),
+                    "totalPortfolioValue": round(total_val, 2),
+                    "formattedPortfolioValue": _format_inr(total_val),
+                },
+            }
+
+        elif clean_type in ("low-stock", "alerts"):
+            items = await self.list_inventory(site, allowed_sites=allowed_sites)
+            low_items = [i for i in items if i.status in ("Low", "Out of Stock")]
+            headers = [
+                "Material Name",
+                "Category",
+                "Site",
+                "Current Stock",
+                "Minimum Safe Buffer",
+                "Shortfall Deficit",
+                "Unit",
+                "Alert Severity",
+            ]
+            rows = []
+            for i in low_items:
+                shortfall = max(0, i.minStock - i.totalStock)
+                rows.append([
+                    i.name,
+                    i.category,
+                    i.site,
+                    str(i.totalStock),
+                    str(i.minStock),
+                    str(shortfall),
+                    i.unit,
+                    "CRITICAL: Out of Stock" if i.totalStock <= 0 else "WARNING: Below Buffer",
+                ])
+            return {
+                "reportType": "low-stock",
+                "title": "Low Stock Material Safety Statement",
+                "generatedAt": generated_at,
+                "site": site or "All Sites",
+                "headers": headers,
+                "rows": rows,
+                "summary": {
+                    "criticalCount": len(low_items),
+                    "affectedSites": len(set(i.site for i in low_items)),
+                },
+            }
+
+        else:
+            # Fallback to general stock summary
+            return await self.generate_report("daily-stock", site, allowed_sites)
+
+    async def generate_report_csv(
+        self,
+        report_type: str,
+        site: Optional[str] = None,
+        allowed_sites: Optional[List[str]] = None,
+    ) -> str:
+        """Generate formatted RFC 4180 CSV string for download."""
+        data = await self.generate_report(report_type, site, allowed_sites)
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Metadata banner
+        writer.writerow(["ANAND HOMES CONSTRUCTION MANAGEMENT PLATFORM"])
+        writer.writerow(["Report:", data.get("title", "Report")])
+        writer.writerow(["Scope:", data.get("site", "All Sites")])
+        writer.writerow(["Generated At:", data.get("generatedAt", "")])
+        writer.writerow([])
+
+        # Table data
+        writer.writerow(data.get("headers", []))
+        for row in data.get("rows", []):
+            writer.writerow(row)
+
+        writer.writerow([])
+        writer.writerow(["--- SUMMARY ---"])
+        summary = data.get("summary", {})
+        for k, v in summary.items():
+            writer.writerow([k, str(v)])
+
+        return output.getvalue()

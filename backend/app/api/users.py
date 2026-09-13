@@ -2,7 +2,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database.mongodb import get_database, db_manager
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_admin
 from app.models.user import UserModel
 from app.schemas.user import ApiResponse, UserProfileUpdateRequest, UserRegisterRequest, UserResponse, UserUpdateRequest
 from app.services.auth_service import AuthService
@@ -39,6 +39,7 @@ async def list_users(
 )
 async def create_user(
     payload: UserRegisterRequest,
+    admin_user: Optional[UserModel] = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> ApiResponse[UserResponse]:
     auth_service = AuthService(db)
@@ -136,6 +137,7 @@ async def get_user_by_id(
 async def update_user(
     user_id: str,
     payload: UserUpdateRequest,
+    admin_user: Optional[UserModel] = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> ApiResponse[UserResponse]:
     user_service = UserService(db)
@@ -159,6 +161,7 @@ async def update_user(
 )
 async def delete_user(
     user_id: str,
+    admin_user: Optional[UserModel] = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> ApiResponse[dict]:
     user_service = UserService(db)

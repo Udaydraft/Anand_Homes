@@ -201,4 +201,20 @@ export const constructionService = {
     const res = await apiClient.get<ApiResponse<DashboardSummary>>('/dashboard/summary', { params });
     return res.data.data;
   },
+
+  // Real-Time Reports
+  async getReportData(reportType: string, site?: string): Promise<any> {
+    const params = site && site !== 'All Sites' ? { site } : {};
+    const res = await apiClient.get<ApiResponse<any>>(`/reports/${reportType}`, { params });
+    return res.data.data;
+  },
+
+  async downloadReportCsv(reportType: string, site?: string): Promise<Blob> {
+    const params = site && site !== 'All Sites' ? { site } : {};
+    const res = await apiClient.get(`/reports/${reportType}/download`, {
+      params,
+      responseType: 'blob',
+    });
+    return res.data;
+  },
 };

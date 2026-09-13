@@ -36,8 +36,8 @@ from fastapi.staticfiles import StaticFiles
 # ---------------------------------------------------------------------------
 # Uploads Directory Setup
 # ---------------------------------------------------------------------------
-UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = settings.UPLOAD_DIR
 
 
 # ---------------------------------------------------------------------------

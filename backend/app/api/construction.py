@@ -1,15 +1,18 @@
 import os
 import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
-
-UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+from app.core.config import get_settings
 from app.database.mongodb import get_database
-from app.dependencies.auth import get_optional_user
+from app.dependencies.auth import get_optional_user, require_admin
+
+settings = get_settings()
+settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = settings.UPLOAD_DIR
 from app.models.user import UserModel
 from app.schemas.construction import (
     ActivityResponse,
@@ -319,15 +322,15 @@ async def list_photos(
 
 @router.post("/photos/upload-file", response_model=ApiResponse[dict], status_code=status.HTTP_201_CREATED)
 async def upload_photo_file(file: UploadFile = File(...)):
-    allowed_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+    allowed_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".pdf"}
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in allowed_exts:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid image file extension '{ext}'. Allowed: {', '.join(allowed_exts)}",
+            detail=f"Invalid file extension '{ext}'. Allowed: {', '.join(allowed_exts)}",
         )
 
-    unique_name = f"site_photo_{uuid.uuid4().hex[:12]}{ext}"
+    unique_name = f"site_upload_{uuid.uuid4().hex[:12]}{ext}"
     dest_path = UPLOAD_DIR / unique_name
 
     try:
@@ -336,14 +339,14 @@ async def upload_photo_file(file: UploadFile = File(...)):
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to write image file: {exc}",
+            detail=f"Failed to write uploaded file: {exc}",
         )
 
     file_url = f"/uploads/{unique_name}"
     return ApiResponse(
         success=True,
-        message="Image file uploaded successfully",
-        data={"url": file_url, "filename": unique_name},
+        message="File uploaded successfully",
+        data={"url": file_url, "filename": unique_name, "size": getattr(file, "size", None)},
     )
 
 
@@ -355,12 +358,59 @@ async def add_photo(payload: SitePhotoCreate, db: AsyncIOMotorDatabase = Depends
 
 
 @router.delete("/photos/{photo_id}", response_model=ApiResponse[dict])
-async def delete_photo(photo_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+async def delete_photo(
+    photo_id: str,
+    admin_user: Optional[UserModel] = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     service = ConstructionService(db)
     success = await service.delete_photo(photo_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
     return ApiResponse(success=True, message="Photo deleted", data={"id": photo_id})
+
+
+# ---------------------------------------------------------------------------
+# Real-Time Reports & Data Export
+# ---------------------------------------------------------------------------
+@router.get("/reports/{report_type}", response_model=ApiResponse[dict])
+async def get_report_data(
+    report_type: str,
+    site: Optional[str] = Query(None),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    service = ConstructionService(db)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    report_data = await service.generate_report(report_type, site=site, allowed_sites=allowed_sites)
+    return ApiResponse(
+        success=True,
+        message=f"Report '{report_data.get('title', report_type)}' generated successfully",
+        data=report_data,
+    )
+
+
+@router.get("/reports/{report_type}/download")
+async def download_report_csv(
+    report_type: str,
+    site: Optional[str] = Query(None),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    service = ConstructionService(db)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    csv_content = await service.generate_report_csv(report_type, site=site, allowed_sites=allowed_sites)
+    clean_type = report_type.lower().replace("_", "-")
+    timestamp = int(datetime.now().timestamp())
+    filename = f"anand_homes_{clean_type}_{timestamp}.csv"
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

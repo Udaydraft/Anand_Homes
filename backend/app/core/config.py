@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,9 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api"
     ENVIRONMENT: str = "production"
     DEBUG: bool = False
+
+    # Uploads Storage
+    UPLOAD_DIR: Path = Path(__file__).resolve().parent.parent.parent / "uploads"
 
     # MongoDB Configuration
     MONGODB_URL: str = "mongodb://localhost:27017"
