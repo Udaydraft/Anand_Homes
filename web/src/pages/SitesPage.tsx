@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardContext } from '../context/DashboardContext';
 import { Button } from '../components/Button';
-import { EmptyState, TableSkeleton } from '../components/common';
+import { EmptyState, TableSkeleton, ImageUploadField } from '../components/common';
+import { resolveImageUrl } from '../services/api';
 import { userService } from '../services/user.service';
 import {
   Building2,
@@ -18,13 +19,21 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 
 export const SitesPage: React.FC = () => {
   const navigate = useNavigate();
-  const { sites, addSite, updateSite, globalSearch, isLoadingData } = useDashboardContext();
+  const { sites, addSite, updateSite, deleteSite, globalSearch, isLoadingData } = useDashboardContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingSite, setEditingSite] = useState<any | null>(null);
+  const [deletingSite, setDeletingSite] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [supervisors, setSupervisors] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [assignModalSite, setAssignModalSite] = useState<any | null>(null);
   const [selectedSupervisorId, setSelectedSupervisorId] = useState<string>('');
@@ -51,6 +60,7 @@ export const SitesPage: React.FC = () => {
     supervisorEmail: '',
     projectType: '',
     contact: '',
+    imageUrl: '',
   });
 
   const query = searchTerm || globalSearch;
@@ -123,6 +133,7 @@ export const SitesPage: React.FC = () => {
       projectType: newSite.projectType || 'Residential Construction',
       status: 'Active',
       contact: newSite.contact || '98765 43210',
+      imageUrl: newSite.imageUrl || undefined,
     });
     setNewSite({
       code: '',
@@ -133,8 +144,82 @@ export const SitesPage: React.FC = () => {
       supervisorEmail: '',
       projectType: '',
       contact: '',
+      imageUrl: '',
     });
     setShowAddModal(false);
+  };
+
+  const handleOpenEditModal = (site: any) => {
+    setEditingSite({
+      id: site.id,
+      name: site.name || '',
+      code: site.code || '',
+      location: site.location || '',
+      supervisor: site.supervisor || '',
+      supervisorId: site.supervisorId || '',
+      supervisorEmail: site.supervisorEmail || '',
+      projectType: site.projectType || 'Residential Construction',
+      contact: site.contact || '',
+      status: site.status || 'Active',
+      imageUrl: site.imageUrl || '',
+    });
+  };
+
+  const handleEditSupervisorSelect = (supId: string) => {
+    const chosen = supervisors.find((s) => s.id === supId);
+    if (chosen) {
+      setEditingSite((prev: any) => ({
+        ...prev,
+        supervisor: chosen.name,
+        supervisorId: chosen.id,
+        supervisorEmail: chosen.email,
+      }));
+    } else {
+      setEditingSite((prev: any) => ({
+        ...prev,
+        supervisor: 'Unassigned',
+        supervisorId: '',
+        supervisorEmail: '',
+      }));
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSite || !editingSite.name || !editingSite.location) return;
+    setIsSavingEdit(true);
+    try {
+      await updateSite(editingSite.id, {
+        name: editingSite.name,
+        code: editingSite.code,
+        location: editingSite.location,
+        supervisor: editingSite.supervisor || 'Unassigned',
+        supervisorId: editingSite.supervisorId || undefined,
+        supervisorEmail: editingSite.supervisorEmail || undefined,
+        projectType: editingSite.projectType,
+        contact: editingSite.contact,
+        status: editingSite.status,
+        imageUrl: editingSite.imageUrl || undefined,
+      });
+      setEditingSite(null);
+    } catch (err) {
+      console.error('Failed to update site:', err);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingSite) return;
+    setIsDeleting(true);
+    try {
+      await deleteSite(deletingSite.id);
+      setDeletingSite(null);
+    } catch (err) {
+      console.error('Failed to delete site:', err);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -221,8 +306,9 @@ export const SitesPage: React.FC = () => {
                           <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
                             <img
                               src={
-                                site.imageUrl ||
-                                'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=100&auto=format&fit=crop&q=80'
+                                site.imageUrl
+                                  ? resolveImageUrl(site.imageUrl)
+                                  : 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f8?w=100&auto=format&fit=crop&q=80'
                               }
                               alt={site.name}
                               className="w-full h-full object-cover"
@@ -277,15 +363,31 @@ export const SitesPage: React.FC = () => {
                         {site.stockValueFormatted}
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
                             onClick={() => handleOpenAssignModal(site)}
-                            className="px-2.5 py-1 rounded-lg bg-[#0D5C3A]/10 hover:bg-[#0D5C3A]/20 text-[#0D5C3A] font-bold text-xs transition-colors flex items-center gap-1 shadow-2xs"
+                            className="px-2 py-1 rounded-lg bg-[#0D5C3A]/10 hover:bg-[#0D5C3A]/20 text-[#0D5C3A] font-bold text-xs transition-colors flex items-center gap-1 shadow-2xs"
                             title="Assign or change supervisor for this site"
                           >
                             <User className="w-3 h-3" />
                             <span>Assign</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(site)}
+                            className="p-1.5 rounded-md text-slate-400 hover:text-[#0D5C3A] hover:bg-emerald-50 transition-colors"
+                            title="Edit Site"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingSite(site)}
+                            className="p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete Site"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -408,6 +510,14 @@ export const SitesPage: React.FC = () => {
                 />
               </div>
 
+              {/* Image Upload Field */}
+              <ImageUploadField
+                value={newSite.imageUrl}
+                onChange={(url) => setNewSite({ ...newSite, imageUrl: url })}
+                label="Site / Project Banner Photo"
+                helperText="Upload site entrance, 3D blueprint, or work-in-progress banner"
+              />
+
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
                 <button
                   type="button"
@@ -424,6 +534,181 @@ export const SitesPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Site Modal */}
+      {editingSite && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Pencil className="w-4 h-4 text-[#0D5C3A]" />
+                  <span>Edit Construction Site</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Modify project details, supervisor, or update photo</p>
+              </div>
+              <button
+                onClick={() => setEditingSite(null)}
+                className="text-slate-400 hover:text-slate-700 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Site Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingSite.name}
+                  onChange={(e) => setEditingSite({ ...editingSite, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Site Code</label>
+                  <input
+                    type="text"
+                    value={editingSite.code}
+                    onChange={(e) => setEditingSite({ ...editingSite, code: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Location *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingSite.location}
+                    onChange={(e) => setEditingSite({ ...editingSite, location: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Assign Supervisor</label>
+                  <select
+                    value={editingSite.supervisorId || ''}
+                    onChange={(e) => handleEditSupervisorSelect(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                  >
+                    <option value="">-- Select Supervisor --</option>
+                    {supervisors.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.email})
+                      </option>
+                    ))}
+                    <option value="unassigned">Unassigned</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editingSite.status || 'Active'}
+                    onChange={(e) => setEditingSite({ ...editingSite, status: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Project Type</label>
+                  <input
+                    type="text"
+                    value={editingSite.projectType}
+                    onChange={(e) => setEditingSite({ ...editingSite, projectType: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Contact Phone</label>
+                  <input
+                    type="text"
+                    value={editingSite.contact}
+                    onChange={(e) => setEditingSite({ ...editingSite, contact: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+              </div>
+
+              {/* Image Upload Field for Edit */}
+              <ImageUploadField
+                value={editingSite.imageUrl}
+                onChange={(url) => setEditingSite({ ...editingSite, imageUrl: url })}
+                label="Site / Project Banner Photo"
+                helperText="Upload a new photo or replace existing banner"
+              />
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingSite(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white font-bold rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSavingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSavingEdit ? 'Saving Changes...' : 'Save Changes'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Site Confirmation Modal */}
+      {deletingSite && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-slate-900 text-sm">Delete Construction Site?</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Are you sure you want to delete <strong className="text-slate-800">{deletingSite.name}</strong> ({deletingSite.code})?
+                  This action removes the site and its linkages.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 mt-5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingSite(null)}
+                className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteConfirm}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeleting && <Loader2 className="w-3 h-3 animate-spin" />}
+                <span>{isDeleting ? 'Deleting...' : 'Confirm Delete'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

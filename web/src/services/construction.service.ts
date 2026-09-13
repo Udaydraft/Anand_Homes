@@ -61,6 +61,20 @@ export const constructionService = {
     return res.data.data;
   },
 
+  async createInventoryItem(data: Partial<InventoryItem>): Promise<InventoryItem> {
+    const res = await apiClient.post<ApiResponse<InventoryItem>>('/inventory', data);
+    return res.data.data;
+  },
+
+  async updateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem> {
+    const res = await apiClient.put<ApiResponse<InventoryItem>>(`/inventory/${id}`, data);
+    return res.data.data;
+  },
+
+  async deleteInventoryItem(id: string): Promise<void> {
+    await apiClient.delete<ApiResponse<any>>(`/inventory/${id}`);
+  },
+
   // Stock In / Out
   async stockIn(data: {
     site: string;

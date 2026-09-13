@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useDashboardContext } from '../context/DashboardContext';
 import { StockBarChart } from '../components/StockBarChart';
 import { EmptyState } from '../components/common/EmptyState';
+import { ImageUploadField } from '../components/common/ImageUploadField';
 import {
   Building2,
   Package,
@@ -51,6 +52,7 @@ export const AdminDashboard: React.FC = () => {
     location: '',
     supervisor: 'Rajesh Kumar',
     projectType: 'Residential Project',
+    imageUrl: '',
   });
 
   const userName = user?.name || 'Admin';
@@ -92,8 +94,16 @@ export const AdminDashboard: React.FC = () => {
       totalMaterials: 0,
       stockValue: 0,
       stockValueFormatted: '₹0',
+      imageUrl: newSite.imageUrl || undefined,
     });
-    setNewSite({ name: '', code: '', location: '', supervisor: 'Rajesh Kumar', projectType: 'Residential Project' });
+    setNewSite({
+      name: '',
+      code: '',
+      location: '',
+      supervisor: 'Rajesh Kumar',
+      projectType: 'Residential Project',
+      imageUrl: '',
+    });
     setShowAddSiteModal(false);
   };
 
@@ -571,6 +581,13 @@ export const AdminDashboard: React.FC = () => {
                   <option value="Industrial Shed">Industrial Shed</option>
                 </select>
               </div>
+
+              <ImageUploadField
+                value={newSite.imageUrl}
+                onChange={(url) => setNewSite({ ...newSite, imageUrl: url })}
+                label="Site / Project Banner Photo"
+                helperText="Upload site entrance or 3D elevation photo"
+              />
 
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
                 <Button

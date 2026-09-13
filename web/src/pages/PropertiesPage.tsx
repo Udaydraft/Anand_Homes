@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { propertyService } from '../services/property.service';
 import { favoriteService } from '../services/favorite.service';
 import { enquiryService } from '../services/enquiry.service';
+import { resolveImageUrl } from '../services/api';
 import { Property, PropertyType } from '@project/shared';
 import {
   Building2,
@@ -21,10 +22,15 @@ import {
   Send,
   Eye,
   Sparkles,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { EmptyState } from '../components/common/EmptyState';
 import { CardSkeleton } from '../components/common/Skeleton';
+import { ImageUploadField } from '../components/common/ImageUploadField';
 import { ErrorMessage } from '../components/feedback/ErrorMessage';
 import { SuccessMessage } from '../components/feedback/SuccessMessage';
 
@@ -33,6 +39,30 @@ export const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Property CRUD Modals State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [deletingProperty, setDeletingProperty] = useState<Property | null>(null);
+  const [isSavingProperty, setIsSavingProperty] = useState(false);
+  const [isDeletingProperty, setIsDeletingProperty] = useState(false);
+
+  const initialPropertyForm = {
+    title: '',
+    description: '',
+    propertyType: 'Apartment' as PropertyType,
+    location: '',
+    price: 6500000,
+    bedrooms: 2,
+    bathrooms: 2,
+    areaSqFt: 1150,
+    status: 'available' as const,
+    featured: false,
+    imageUrl: '',
+    amenities: '24/7 Security, Power Backup, Covered Car Parking, Gym, Children Play Area',
+  };
+
+  const [newProperty, setNewProperty] = useState(initialPropertyForm);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -116,6 +146,92 @@ export const PropertiesPage: React.FC = () => {
     }
   };
 
+  const handleAddPropertySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProperty.title || !newProperty.location || !newProperty.price) return;
+    setIsSavingProperty(true);
+    try {
+      const amenitiesArr = newProperty.amenities
+        ? newProperty.amenities.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+      await propertyService.createProperty({
+        ...newProperty,
+        price: Number(newProperty.price),
+        bedrooms: Number(newProperty.bedrooms),
+        bathrooms: Number(newProperty.bathrooms),
+        areaSqFt: Number(newProperty.areaSqFt),
+        amenities: amenitiesArr,
+        galleryImages: newProperty.imageUrl ? [newProperty.imageUrl] : [],
+      });
+      setShowAddModal(false);
+      setNewProperty(initialPropertyForm);
+      await fetchProperties();
+    } catch (err) {
+      console.error('Failed to create property:', err);
+    } finally {
+      setIsSavingProperty(false);
+    }
+  };
+
+  const handleOpenEditProperty = (prop: Property) => {
+    setEditingProperty(prop);
+  };
+
+  const handleEditPropertySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProperty || !editingProperty.title) return;
+    setIsSavingProperty(true);
+    try {
+      const amenitiesArr = Array.isArray(editingProperty.amenities)
+        ? editingProperty.amenities
+        : String(editingProperty.amenities || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+      await propertyService.updateProperty(editingProperty.id, {
+        title: editingProperty.title,
+        description: editingProperty.description,
+        propertyType: editingProperty.propertyType,
+        location: editingProperty.location,
+        price: Number(editingProperty.price),
+        bedrooms: Number(editingProperty.bedrooms),
+        bathrooms: Number(editingProperty.bathrooms),
+        areaSqFt: Number(editingProperty.areaSqFt),
+        status: editingProperty.status,
+        featured: editingProperty.featured,
+        imageUrl: editingProperty.imageUrl,
+        amenities: amenitiesArr,
+      });
+      setEditingProperty(null);
+      if (selectedProperty?.id === editingProperty.id) {
+        setSelectedProperty(null);
+      }
+      await fetchProperties();
+    } catch (err) {
+      console.error('Failed to update property:', err);
+    } finally {
+      setIsSavingProperty(false);
+    }
+  };
+
+  const handleDeletePropertyConfirm = async () => {
+    if (!deletingProperty) return;
+    setIsDeletingProperty(true);
+    try {
+      await propertyService.deleteProperty(deletingProperty.id);
+      setDeletingProperty(null);
+      if (selectedProperty?.id === deletingProperty.id) {
+        setSelectedProperty(null);
+      }
+      await fetchProperties();
+    } catch (err) {
+      console.error('Failed to delete property:', err);
+    } finally {
+      setIsDeletingProperty(false);
+    }
+  };
+
   const propertyTypes = ['All', 'Apartment', 'Villa', 'Plot', 'Commercial'];
   const locations = ['All', 'Anna Nagar', 'ECR', 'OMR', 'Velachery', 'Porur', 'Tambaram'];
   const bedroomOptions = ['All', '2', '3', '4'];
@@ -135,6 +251,14 @@ export const PropertiesPage: React.FC = () => {
             Explore premium residential apartments, beachfront villas, and commercial plots
           </p>
         </div>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setShowAddModal(true)}
+          leftIcon={<Plus className="w-4 h-4" />}
+        >
+          Add Property
+        </Button>
       </div>
 
       {/* Filter and Search Bar */}
@@ -260,8 +384,9 @@ export const PropertiesPage: React.FC = () => {
               <div className="relative aspect-16/10 bg-slate-100 overflow-hidden">
                 <img
                   src={
-                    prop.imageUrl ||
-                    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&auto=format&fit=crop&q=80'
+                    prop.imageUrl
+                      ? resolveImageUrl(prop.imageUrl)
+                      : 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&auto=format&fit=crop&q=80'
                   }
                   alt={prop.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -278,20 +403,44 @@ export const PropertiesPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Heart Button */}
-                <button
-                  type="button"
-                  onClick={(e) => handleToggleFavorite(e, prop)}
-                  className={`absolute top-3 right-3 p-2 rounded-full backdrop-blur-xs transition-all ${
-                    prop.isFavorite
-                      ? 'bg-white text-rose-600 shadow-md scale-110'
-                      : 'bg-black/40 text-white hover:bg-white hover:text-rose-600'
-                  }`}
-                  title={prop.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                  aria-label="Toggle favorite"
-                >
-                  <Heart className={`w-4 h-4 ${prop.isFavorite ? 'fill-rose-600' : ''}`} />
-                </button>
+                {/* Action Buttons Top Right: Edit, Delete, Heart */}
+                <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEditProperty(prop);
+                    }}
+                    className="p-1.5 rounded-full bg-black/40 text-white hover:bg-white hover:text-[#0D5C3A] backdrop-blur-xs transition-all"
+                    title="Edit Property"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeletingProperty(prop);
+                    }}
+                    className="p-1.5 rounded-full bg-black/40 text-white hover:bg-white hover:text-rose-600 backdrop-blur-xs transition-all"
+                    title="Delete Property"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleFavorite(e, prop)}
+                    className={`p-1.5 rounded-full backdrop-blur-xs transition-all ${
+                      prop.isFavorite
+                        ? 'bg-white text-rose-600 shadow-md scale-105'
+                        : 'bg-black/40 text-white hover:bg-white hover:text-rose-600'
+                    }`}
+                    title={prop.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                    aria-label="Toggle favorite"
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${prop.isFavorite ? 'fill-rose-600' : ''}`} />
+                  </button>
+                </div>
 
                 {/* Price pill */}
                 <div className="absolute bottom-3 left-3 px-3 py-1 rounded-lg bg-white/95 backdrop-blur-xs shadow-xs text-slate-900">
@@ -357,8 +506,9 @@ export const PropertiesPage: React.FC = () => {
             <div className="relative aspect-16/9 bg-slate-900 overflow-hidden">
               <img
                 src={
-                  selectedProperty.imageUrl ||
-                  'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&auto=format&fit=crop&q=80'
+                  selectedProperty.imageUrl
+                    ? resolveImageUrl(selectedProperty.imageUrl)
+                    : 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&auto=format&fit=crop&q=80'
                 }
                 alt={selectedProperty.title}
                 className="w-full h-full object-cover"
@@ -371,18 +521,44 @@ export const PropertiesPage: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
 
-              <button
-                type="button"
-                onClick={(e) => handleToggleFavorite(e, selectedProperty)}
-                className={`absolute top-4 right-16 p-2 rounded-full backdrop-blur-xs transition-all ${
-                  selectedProperty.isFavorite
-                    ? 'bg-white text-rose-600'
-                    : 'bg-black/60 text-white hover:bg-white hover:text-rose-600'
-                }`}
-                title="Toggle favorite"
-              >
-                <Heart className={`w-5 h-5 ${selectedProperty.isFavorite ? 'fill-rose-600' : ''}`} />
-              </button>
+              <div className="absolute top-4 right-16 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const p = selectedProperty;
+                    setSelectedProperty(null);
+                    handleOpenEditProperty(p);
+                  }}
+                  className="p-2 rounded-full bg-black/60 text-white hover:bg-white hover:text-[#0D5C3A] backdrop-blur-xs transition-all"
+                  title="Edit Property"
+                >
+                  <Pencil className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const p = selectedProperty;
+                    setSelectedProperty(null);
+                    setDeletingProperty(p);
+                  }}
+                  className="p-2 rounded-full bg-black/60 text-white hover:bg-white hover:text-rose-600 backdrop-blur-xs transition-all"
+                  title="Delete Property"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleToggleFavorite(e, selectedProperty)}
+                  className={`p-2 rounded-full backdrop-blur-xs transition-all ${
+                    selectedProperty.isFavorite
+                      ? 'bg-white text-rose-600'
+                      : 'bg-black/60 text-white hover:bg-white hover:text-rose-600'
+                  }`}
+                  title="Toggle favorite"
+                >
+                  <Heart className={`w-5 h-5 ${selectedProperty.isFavorite ? 'fill-rose-600' : ''}`} />
+                </button>
+              </div>
 
               <div className="absolute bottom-4 left-4 right-4 text-white flex items-end justify-between bg-gradient-to-t from-black/80 to-transparent p-4 rounded-xl">
                 <div>
@@ -534,6 +710,420 @@ export const PropertiesPage: React.FC = () => {
                   </div>
                 </form>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Property Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-[#0D5C3A]" />
+                  <span>Add New Real Estate Property</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">List a new residential or commercial project with photo & specs</p>
+              </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddPropertySubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Property Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Anand Serene Heights - Luxury 3BHK"
+                  value={newProperty.title}
+                  onChange={(e) => setNewProperty({ ...newProperty, title: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Property Type *</label>
+                  <select
+                    value={newProperty.propertyType}
+                    onChange={(e) => setNewProperty({ ...newProperty, propertyType: e.target.value as PropertyType })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                  >
+                    <option value="Apartment">Apartment</option>
+                    <option value="Villa">Villa</option>
+                    <option value="Plot">Plot</option>
+                    <option value="Commercial">Commercial</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Location *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Anna Nagar, Chennai"
+                    value={newProperty.location}
+                    onChange={(e) => setNewProperty({ ...newProperty, location: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    placeholder="e.g. 7500000"
+                    value={newProperty.price || ''}
+                    onChange={(e) => setNewProperty({ ...newProperty, price: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Bedrooms (BHK)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newProperty.bedrooms}
+                    onChange={(e) => setNewProperty({ ...newProperty, bedrooms: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Bathrooms</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newProperty.bathrooms}
+                    onChange={(e) => setNewProperty({ ...newProperty, bathrooms: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Area (Sq.Ft)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 1450"
+                    value={newProperty.areaSqFt || ''}
+                    onChange={(e) => setNewProperty({ ...newProperty, areaSqFt: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={newProperty.status}
+                    onChange={(e) => setNewProperty({ ...newProperty, status: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                  >
+                    <option value="available">Available</option>
+                    <option value="booked">Booked</option>
+                    <option value="sold">Sold</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  placeholder="Highlights, architectural finishes, floor level, nearby landmarks..."
+                  value={newProperty.description}
+                  onChange={(e) => setNewProperty({ ...newProperty, description: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Amenities (Comma-separated)</label>
+                <input
+                  type="text"
+                  placeholder="Swimming Pool, 24/7 Security, Gym, Solar Power"
+                  value={newProperty.amenities}
+                  onChange={(e) => setNewProperty({ ...newProperty, amenities: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                />
+              </div>
+
+              {/* Image Upload Field */}
+              <ImageUploadField
+                value={newProperty.imageUrl}
+                onChange={(url) => setNewProperty({ ...newProperty, imageUrl: url })}
+                label="Property Cover Photo"
+                helperText="Upload exterior 3D elevation or photography banner"
+              />
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="newPropFeatured"
+                  checked={newProperty.featured}
+                  onChange={(e) => setNewProperty({ ...newProperty, featured: e.target.checked })}
+                  className="rounded border-slate-300 text-[#0D5C3A] focus:ring-[#0D5C3A]"
+                />
+                <label htmlFor="newPropFeatured" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                  Mark as Featured Property
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProperty}
+                  className="px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white font-bold rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSavingProperty && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSavingProperty ? 'Adding Property...' : 'Add Property'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Property Modal */}
+      {editingProperty && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Pencil className="w-4 h-4 text-[#0D5C3A]" />
+                  <span>Edit Property Details</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Update specifications, price, or replace cover photograph</p>
+              </div>
+              <button
+                onClick={() => setEditingProperty(null)}
+                className="text-slate-400 hover:text-slate-700 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditPropertySubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Property Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingProperty.title}
+                  onChange={(e) => setEditingProperty({ ...editingProperty, title: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Property Type *</label>
+                  <select
+                    value={editingProperty.propertyType}
+                    onChange={(e) => setEditingProperty({ ...editingProperty, propertyType: e.target.value as PropertyType })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                  >
+                    <option value="Apartment">Apartment</option>
+                    <option value="Villa">Villa</option>
+                    <option value="Plot">Plot</option>
+                    <option value="Commercial">Commercial</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Location *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingProperty.location}
+                    onChange={(e) => setEditingProperty({ ...editingProperty, location: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={editingProperty.price || ''}
+                    onChange={(e) => setEditingProperty({ ...editingProperty, price: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Bedrooms</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingProperty.bedrooms}
+                    onChange={(e) => setEditingProperty({ ...editingProperty, bedrooms: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Bathrooms</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingProperty.bathrooms}
+                    onChange={(e) => setEditingProperty({ ...editingProperty, bathrooms: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Area (Sq.Ft)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingProperty.areaSqFt || ''}
+                    onChange={(e) => setEditingProperty({ ...editingProperty, areaSqFt: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editingProperty.status}
+                    onChange={(e) => setEditingProperty({ ...editingProperty, status: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                  >
+                    <option value="available">Available</option>
+                    <option value="booked">Booked</option>
+                    <option value="sold">Sold</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={editingProperty.description}
+                  onChange={(e) => setEditingProperty({ ...editingProperty, description: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Amenities</label>
+                <input
+                  type="text"
+                  value={
+                    Array.isArray(editingProperty.amenities)
+                      ? editingProperty.amenities.join(', ')
+                      : String(editingProperty.amenities || '')
+                  }
+                  onChange={(e) =>
+                    setEditingProperty({
+                      ...editingProperty,
+                      amenities: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                />
+              </div>
+
+              {/* Image Upload Field for Edit */}
+              <ImageUploadField
+                value={editingProperty.imageUrl}
+                onChange={(url) => setEditingProperty({ ...editingProperty, imageUrl: url })}
+                label="Property Cover Photo"
+                helperText="Upload a new photo or replace existing banner"
+              />
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="editPropFeatured"
+                  checked={editingProperty.featured}
+                  onChange={(e) => setEditingProperty({ ...editingProperty, featured: e.target.checked })}
+                  className="rounded border-slate-300 text-[#0D5C3A] focus:ring-[#0D5C3A]"
+                />
+                <label htmlFor="editPropFeatured" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                  Mark as Featured Property
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingProperty(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProperty}
+                  className="px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white font-bold rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSavingProperty && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSavingProperty ? 'Saving Changes...' : 'Save Changes'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Property Confirmation Modal */}
+      {deletingProperty && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-slate-900 text-sm">Delete Real Estate Listing?</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Are you sure you want to remove <strong className="text-slate-800">{deletingProperty.title}</strong>?
+                  This will unlist the property from public browsing.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 mt-5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingProperty(null)}
+                className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingProperty}
+                onClick={handleDeletePropertyConfirm}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeletingProperty && <Loader2 className="w-3 h-3 animate-spin" />}
+                <span>{isDeletingProperty ? 'Deleting...' : 'Confirm Delete'}</span>
+              </button>
             </div>
           </div>
         </div>

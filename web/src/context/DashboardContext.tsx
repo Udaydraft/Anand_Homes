@@ -85,6 +85,9 @@ interface DashboardContextType {
   updateSite: (id: string, site: Partial<Site>) => Promise<void>;
   deleteSite: (id: string) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
+  addInventoryItem: (item: Partial<InventoryItem>) => Promise<void>;
+  updateInventoryItem: (id: string, item: Partial<InventoryItem>) => Promise<void>;
+  deleteInventoryItem: (id: string) => Promise<void>;
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
@@ -464,6 +467,45 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const addInventoryItem = async (item: Partial<InventoryItem>) => {
+    try {
+      await constructionService.createInventoryItem(item);
+      await refreshData();
+    } catch {
+      const newItem: InventoryItem = {
+        id: `inv-${Date.now()}`,
+        name: item.name || 'New Material',
+        category: (item.category as any) || 'Others',
+        unit: item.unit || 'units',
+        totalStock: item.totalStock || 0,
+        minStock: item.minStock || 10,
+        status: (item.totalStock || 0) <= (item.minStock || 10) ? 'Low' : 'Good',
+        site: item.site || selectedSite || 'All Sites',
+      };
+      setInventory((prev) => [newItem, ...prev]);
+    }
+  };
+
+  const updateInventoryItem = async (id: string, item: Partial<InventoryItem>) => {
+    try {
+      await constructionService.updateInventoryItem(id, item);
+      await refreshData();
+    } catch {
+      setInventory((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, ...item } : i))
+      );
+    }
+  };
+
+  const deleteInventoryItem = async (id: string) => {
+    try {
+      await constructionService.deleteInventoryItem(id);
+      await refreshData();
+    } catch {
+      setInventory((prev) => prev.filter((i) => i.id !== id));
+    }
+  };
+
   return (
     <DashboardContext.Provider
       value={{
@@ -498,6 +540,9 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updateSite,
         deleteSite,
         deleteDelivery,
+        addInventoryItem,
+        updateInventoryItem,
+        deleteInventoryItem,
       }}
     >
       {children}
