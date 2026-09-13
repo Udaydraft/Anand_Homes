@@ -27,4 +27,13 @@ export const userService = {
     const res = await apiClient.post<ApiResponse<User>>('/users', data);
     return res.data.data!;
   },
+
+  async updateUser(id: string, data: Partial<User> & { password?: string }): Promise<User> {
+    const res = await apiClient.put<ApiResponse<User>>(`/users/${id}`, data);
+    return res.data.data!;
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    await apiClient.delete<ApiResponse<any>>(`/users/${id}`);
+  },
 };

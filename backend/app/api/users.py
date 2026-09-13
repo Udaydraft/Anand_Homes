@@ -4,7 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database.mongodb import get_database, db_manager
 from app.dependencies.auth import get_current_user
 from app.models.user import UserModel
-from app.schemas.user import ApiResponse, UserProfileUpdateRequest, UserRegisterRequest, UserResponse
+from app.schemas.user import ApiResponse, UserProfileUpdateRequest, UserRegisterRequest, UserResponse, UserUpdateRequest
 from app.services.auth_service import AuthService
 from app.services.user_service import UserService
 
@@ -103,3 +103,74 @@ async def update_profile(
         message="Profile updated successfully",
         data=UserService.to_response(updated_user),
     )
+
+
+@router.get(
+    "/{user_id}",
+    response_model=ApiResponse[UserResponse],
+    summary="Get user by ID",
+)
+async def get_user_by_id(
+    user_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ApiResponse[UserResponse]:
+    user_service = UserService(db)
+    user = await user_service.get_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+    return ApiResponse(
+        success=True,
+        message="User retrieved successfully",
+        data=user_service.to_response(user),
+    )
+
+
+@router.put(
+    "/{user_id}",
+    response_model=ApiResponse[UserResponse],
+    summary="Update user/supervisor",
+)
+async def update_user(
+    user_id: str,
+    payload: UserUpdateRequest,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ApiResponse[UserResponse]:
+    user_service = UserService(db)
+    updated = await user_service.update_user(user_id, payload)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found for update.",
+        )
+    return ApiResponse(
+        success=True,
+        message="User updated successfully",
+        data=user_service.to_response(updated),
+    )
+
+
+@router.delete(
+    "/{user_id}",
+    response_model=ApiResponse[dict],
+    summary="Delete user/supervisor",
+)
+async def delete_user(
+    user_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ApiResponse[dict]:
+    user_service = UserService(db)
+    success = await user_service.delete_user(user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found for deletion.",
+        )
+    return ApiResponse(
+        success=True,
+        message="User deleted successfully",
+        data={"id": user_id},
+    )
+

@@ -391,7 +391,7 @@ export const InventoryPage: React.FC = () => {
                   placeholder="e.g. UltraTech Super Cement 53 Grade"
                   value={newItem.name}
                   onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
                 />
               </div>
 
@@ -401,7 +401,7 @@ export const InventoryPage: React.FC = () => {
                   <select
                     value={newItem.category}
                     onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-900"
                   >
                     {categories.filter((c) => c !== 'All').map((cat) => (
                       <option key={cat} value={cat}>
@@ -418,7 +418,7 @@ export const InventoryPage: React.FC = () => {
                     placeholder="e.g. Bags, MT, Tons, Sqft"
                     value={newItem.unit}
                     onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
                   />
                 </div>
               </div>
@@ -431,7 +431,7 @@ export const InventoryPage: React.FC = () => {
                     min={0}
                     value={newItem.totalStock}
                     onChange={(e) => setNewItem({ ...newItem, totalStock: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
                   />
                 </div>
                 <div>
@@ -441,7 +441,7 @@ export const InventoryPage: React.FC = () => {
                     min={0}
                     value={newItem.minStock}
                     onChange={(e) => setNewItem({ ...newItem, minStock: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
                   />
                 </div>
               </div>
@@ -451,7 +451,7 @@ export const InventoryPage: React.FC = () => {
                 <select
                   value={newItem.site}
                   onChange={(e) => setNewItem({ ...newItem, site: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-900"
                 >
                   {sitesList.filter((s) => s !== 'All Sites').map((s) => (
                     <option key={s} value={s}>
@@ -511,7 +511,7 @@ export const InventoryPage: React.FC = () => {
                   required
                   value={editingItem.name}
                   onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
                 />
               </div>
 
@@ -521,7 +521,7 @@ export const InventoryPage: React.FC = () => {
                   <select
                     value={editingItem.category}
                     onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-800"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] bg-white font-medium text-slate-900"
                   >
                     {categories.filter((c) => c !== 'All').map((cat) => (
                       <option key={cat} value={cat}>
@@ -537,7 +537,7 @@ export const InventoryPage: React.FC = () => {
                     required
                     value={editingItem.unit}
                     onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
                   />
                 </div>
               </div>
@@ -550,7 +550,7 @@ export const InventoryPage: React.FC = () => {
                     min={0}
                     value={editingItem.totalStock}
                     onChange={(e) => setEditingItem({ ...editingItem, totalStock: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
                   />
                 </div>
                 <div>
@@ -560,7 +560,7 @@ export const InventoryPage: React.FC = () => {
                     min={0}
                     value={editingItem.minStock}
                     onChange={(e) => setEditingItem({ ...editingItem, minStock: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
                   />
                 </div>
               </div>
@@ -571,7 +571,7 @@ export const InventoryPage: React.FC = () => {
                   type="text"
                   disabled
                   value={editingItem.site}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-500 font-medium"
                 />
               </div>
 

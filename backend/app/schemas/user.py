@@ -55,3 +55,12 @@ class AuthResponseData(BaseModel):
 
 class UserProfileUpdateRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=100)
+
+
+class UserUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+    role: Optional[str] = None
+    password: Optional[str] = Field(None, min_length=6, max_length=128)
+    is_active: Optional[bool] = None
+

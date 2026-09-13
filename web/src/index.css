@@ -6,8 +6,30 @@
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background-color: #F8FAFC;
-    color: #1E293B;
+    color: #0F172A;
     overflow-x: hidden;
+  }
+
+  /* High contrast text fields - letters are always sharp and clearly visible */
+  input,
+  select,
+  textarea {
+    color: #0F172A !important;
+    background-color: #FFFFFF !important;
+    font-weight: 500;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #94A3B8 !important;
+    font-weight: 400;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    color: #0F172A !important;
+    background-color: #FFFFFF !important;
   }
 }
 

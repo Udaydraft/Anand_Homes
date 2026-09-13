@@ -226,13 +226,31 @@ class ConstructionService:
 
         if update_fields:
             update_fields["updatedAt"] = datetime.now(timezone.utc).isoformat()
-            res = await self.sites.find_one_and_update(
-                {"$or": [{"id": site_id}, {"_id": site_id}]},
-                {"$set": update_fields},
-                return_document=True,
-            )
-            await self._persist()
-            return SiteResponse(**self._doc_to_res(res)) if res else None
+            for attempt in range(2):
+                try:
+                    res = await self.sites.find_one_and_update(
+                        {"$or": [{"id": site_id}, {"_id": site_id}]},
+                        {"$set": update_fields},
+                        return_document=True,
+                    )
+                    if not res and data.name:
+                        doc = data.model_dump()
+                        doc["id"] = site_id
+                        doc["_id"] = site_id
+                        doc["createdAt"] = datetime.now(timezone.utc).isoformat()
+                        doc["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                        if not doc.get("stockValueFormatted"):
+                            doc["stockValueFormatted"] = _format_inr(doc.get("stockValue", 0))
+                        await self.sites.insert_one(doc)
+                        await self._persist()
+                        return SiteResponse(**self._doc_to_res(doc))
+
+                    await self._persist()
+                    return SiteResponse(**self._doc_to_res(res)) if res else None
+                except Exception:
+                    if attempt == 1:
+                        raise
+                    await asyncio.sleep(0.3)
         return await self.get_site(site_id)
 
     async def delete_site(self, site_id: str) -> bool:
@@ -305,12 +323,29 @@ class ConstructionService:
                 update_fields["status"] = _calc_stock_status(tot, min_s)
 
         if update_fields:
-            res = await self.inventory.find_one_and_update(
-                {"$or": [{"id": item_id}, {"_id": item_id}]},
-                {"$set": update_fields},
-                return_document=True,
-            )
-            return InventoryResponse(**self._doc_to_res(res)) if res else None
+            for attempt in range(2):
+                try:
+                    res = await self.inventory.find_one_and_update(
+                        {"$or": [{"id": item_id}, {"_id": item_id}]},
+                        {"$set": update_fields},
+                        return_document=True,
+                    )
+                    if not res and data.name and data.site:
+                        doc = data.model_dump()
+                        doc["id"] = item_id
+                        doc["_id"] = item_id
+                        tot = doc.get("totalStock", 0)
+                        min_s = doc.get("minStock", 10)
+                        doc["status"] = _calc_stock_status(tot, min_s)
+                        doc["createdAt"] = datetime.now(timezone.utc).isoformat()
+                        await self.inventory.insert_one(doc)
+                        return InventoryResponse(**self._doc_to_res(doc))
+
+                    return InventoryResponse(**self._doc_to_res(res)) if res else None
+                except Exception:
+                    if attempt == 1:
+                        raise
+                    await asyncio.sleep(0.3)
         return await self.get_inventory_item(item_id)
 
     async def delete_inventory_item(self, item_id: str) -> bool:

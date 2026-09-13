@@ -59,8 +59,11 @@ class MongoDBManager:
             ca_file = None
 
         client_kwargs: Dict[str, Any] = {
-            "serverSelectionTimeoutMS": 5000,
-            "connectTimeoutMS": 5000,
+            "serverSelectionTimeoutMS": 10000,
+            "connectTimeoutMS": 10000,
+            "socketTimeoutMS": 15000,
+            "retryWrites": True,
+            "retryReads": True,
         }
         if ca_file and "mongodb+srv" in settings.MONGODB_URL:
             client_kwargs["tlsCAFile"] = ca_file

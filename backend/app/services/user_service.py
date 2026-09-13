@@ -67,6 +67,41 @@ class UserService:
 
         return UserModel.from_mongo(result)
 
+    async def update_user(
+        self, user_id: str, update_data: Any
+    ) -> Optional[UserModel]:
+        """Full update of user/supervisor attributes."""
+        update_fields: Dict[str, Any] = {}
+        if getattr(update_data, "name", None) is not None:
+            update_fields["name"] = update_data.name.strip()
+        if getattr(update_data, "email", None) is not None:
+            update_fields["email"] = update_data.email.lower().strip()
+        if getattr(update_data, "role", None) is not None:
+            update_fields["role"] = update_data.role.lower().strip()
+        if getattr(update_data, "is_active", None) is not None:
+            update_fields["is_active"] = update_data.is_active
+        if getattr(update_data, "password", None) is not None and len(update_data.password) >= 6:
+            from app.core.security import hash_password
+            update_fields["password_hash"] = hash_password(update_data.password)
+
+        if not update_fields:
+            return await self.get_by_id(user_id)
+
+        update_fields["updated_at"] = datetime.now(timezone.utc)
+        result = await self.collection.find_one_and_update(
+            {"$or": [{"_id": user_id}, {"id": user_id}]},
+            {"$set": update_fields},
+            return_document=True,
+        )
+        if not result:
+            return None
+        return UserModel.from_mongo(result)
+
+    async def delete_user(self, user_id: str) -> bool:
+        """Delete a user/supervisor by ID."""
+        res = await self.collection.delete_one({"$or": [{"_id": user_id}, {"id": user_id}]})
+        return res.deleted_count > 0
+
     @staticmethod
     def to_response(user: UserModel) -> UserResponse:
         """Convert UserModel to public UserResponse schema."""
