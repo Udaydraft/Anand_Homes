@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { constructionService } from '../services/construction.service';
 import { ProjectMaster, SupervisorMaster, ProjectDuration, LabourEntry } from '@project/shared';
+import { ConfirmationModal, DetailItem } from '../components/common';
 
 type TabType = 'all-in-one' | 'projects' | 'supervisors' | 'durations' | 'labour';
 
@@ -44,6 +45,42 @@ export const ProjectMasterPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Universal Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning' | 'info' | 'success';
+    confirmText: string;
+    details?: DetailItem[];
+    action: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'danger',
+    confirmText: 'Confirm',
+    action: async () => {},
+  });
+  const [confirmLoading, setConfirmLoading] = useState(false);
+
+  const closeConfirm = () => {
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleConfirmAction = async () => {
+    try {
+      setConfirmLoading(true);
+      await confirmModal.action();
+      closeConfirm();
+    } catch (err: any) {
+      console.error('Confirmation action error:', err);
+      setFeedback({ type: 'error', message: err.response?.data?.message || 'Operation failed.' });
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
 
   // -------------------------------------------------------------------------
   // Form State: 1. All-in-One Fast Setup
@@ -272,13 +309,24 @@ export const ProjectMasterPage: React.FC = () => {
     }
   };
 
-  const handleDeleteProject = async (id: string) => {
-    try {
-      await constructionService.deleteProjectMaster(id);
-      await fetchAllData();
-    } catch {
-      console.error('Failed to delete project.');
-    }
+  const promptDeleteProject = (p: ProjectMaster) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Project Master?',
+      message: `Are you sure you want to permanently delete project "${p.projectName}"? Site associations and historical records for site "${p.siteName}" may be affected.`,
+      variant: 'danger',
+      confirmText: 'Delete Project',
+      details: [
+        { label: 'Project Name', value: p.projectName },
+        { label: 'Site Location', value: p.siteName },
+        { label: 'Status', value: p.status || 'Active' },
+      ],
+      action: async () => {
+        await constructionService.deleteProjectMaster(p.id);
+        setFeedback({ type: 'success', message: `Project "${p.projectName}" removed successfully.` });
+        await fetchAllData();
+      },
+    });
   };
 
   // -------------------------------------------------------------------------
@@ -331,13 +379,25 @@ export const ProjectMasterPage: React.FC = () => {
     }
   };
 
-  const handleDeleteSupervisor = async (id: string) => {
-    try {
-      await constructionService.deleteSupervisorMaster(id);
-      await fetchAllData();
-    } catch {
-      console.error('Failed to delete supervisor.');
-    }
+  const promptDeleteSupervisor = (s: SupervisorMaster) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remove Supervisor Assignment?',
+      message: `Are you sure you want to remove supervisor "${s.name}"? They will lose dashboard access to site "${s.site}".`,
+      variant: 'danger',
+      confirmText: 'Remove Supervisor',
+      details: [
+        { label: 'Supervisor Name', value: s.name },
+        { label: 'Login ID', value: s.loginId },
+        { label: 'Assigned Project', value: s.project },
+        { label: 'Site Location', value: s.site },
+      ],
+      action: async () => {
+        await constructionService.deleteSupervisorMaster(s.id);
+        setFeedback({ type: 'success', message: `Supervisor "${s.name}" removed successfully.` });
+        await fetchAllData();
+      },
+    });
   };
 
   // -------------------------------------------------------------------------
@@ -373,13 +433,47 @@ export const ProjectMasterPage: React.FC = () => {
     }
   };
 
-  const handleDeleteDuration = async (id: string) => {
-    try {
-      await constructionService.deleteProjectDuration(id);
-      await fetchAllData();
-    } catch {
-      console.error('Failed to delete duration schedule.');
-    }
+  const promptDeleteDuration = (dur: ProjectDuration) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Milestone Schedule?',
+      message: `Are you sure you want to remove this duration milestone for "${dur.projectName}" at "${dur.siteName}"?`,
+      variant: 'danger',
+      confirmText: 'Delete Milestone',
+      details: [
+        { label: 'Project Name', value: dur.projectName },
+        { label: 'Site Location', value: dur.siteName },
+        { label: 'Milestone Window', value: `${dur.fromDate} to ${dur.toDate}` },
+      ],
+      action: async () => {
+        await constructionService.deleteProjectDuration(dur.id);
+        setFeedback({ type: 'success', message: 'Milestone duration schedule removed.' });
+        await fetchAllData();
+      },
+    });
+  };
+
+  const promptDeleteLabour = (entry: LabourEntry) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Labour Deployment Record?',
+      message: `Are you sure you want to delete the daily workforce log for site "${entry.site}"?`,
+      variant: 'danger',
+      confirmText: 'Delete Record',
+      details: [
+        { label: 'Date', value: entry.date },
+        { label: 'Project / Site', value: `${entry.project} (${entry.site})` },
+        { label: 'Nature of Work', value: entry.natureOfWork },
+        { label: 'Headcount', value: `${entry.workerCount} workers` },
+      ],
+      action: async () => {
+        if (entry.id) {
+          await constructionService.deleteLabourEntry(entry.id);
+          setFeedback({ type: 'success', message: 'Labour deployment log deleted.' });
+          await fetchAllData();
+        }
+      },
+    });
   };
 
   return (
@@ -847,7 +941,7 @@ export const ProjectMasterPage: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteProject(p.id)}
+                            onClick={() => promptDeleteProject(p)}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                             title="Delete"
                           >
@@ -1039,7 +1133,7 @@ export const ProjectMasterPage: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteSupervisor(s.id)}
+                            onClick={() => promptDeleteSupervisor(s)}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                             title="Delete"
                           >
@@ -1185,7 +1279,7 @@ export const ProjectMasterPage: React.FC = () => {
                         <td className="px-4 py-3 font-mono text-blue-700 font-semibold">{dur.toDate}</td>
                         <td className="px-4 py-3 text-right">
                           <button
-                            onClick={() => handleDeleteDuration(dur.id)}
+                            onClick={() => promptDeleteDuration(dur)}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                             title="Delete"
                           >
@@ -1427,16 +1521,7 @@ export const ProjectMasterPage: React.FC = () => {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
-                            onClick={async () => {
-                              if (entry.id) {
-                                try {
-                                  await constructionService.deleteLabourEntry(entry.id);
-                                  await fetchAllData();
-                                } catch (err) {
-                                  console.error('Failed to delete labour entry:', err);
-                                }
-                              }
-                            }}
+                            onClick={() => promptDeleteLabour(entry)}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                             title="Delete"
                           >
@@ -1452,6 +1537,19 @@ export const ProjectMasterPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirm}
+        onConfirm={handleConfirmAction}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        confirmText={confirmModal.confirmText}
+        details={confirmModal.details}
+        isLoading={confirmLoading}
+      />
     </div>
   );
 };

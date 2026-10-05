@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardContext } from '../context/DashboardContext';
 import { Button } from '../components/Button';
-import { EmptyState, TableSkeleton } from '../components/common';
+import { EmptyState, TableSkeleton, ConfirmationModal } from '../components/common';
 import {
   Package,
   Download,
@@ -603,42 +603,26 @@ export const InventoryPage: React.FC = () => {
       )}
 
       {/* Delete Inventory Item Confirmation Modal */}
-      {deletingItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
-            <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-slate-900 text-sm">Delete Inventory Item?</h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Are you sure you want to remove <strong className="text-slate-800">{deletingItem.name}</strong> from <strong className="text-slate-800">{deletingItem.site}</strong>?
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 mt-5 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setDeletingItem(null)}
-                className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeletingItem}
-                onClick={handleDeleteItemConfirm}
-                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {isDeletingItem && <Loader2 className="w-3 h-3 animate-spin" />}
-                <span>{isDeletingItem ? 'Deleting...' : 'Confirm Delete'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmationModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleDeleteItemConfirm}
+        title="Delete Inventory Material?"
+        message={`Are you sure you want to permanently delete "${deletingItem?.name}" from "${deletingItem?.site}"? This item catalog entry and stock tracking record will be removed.`}
+        variant="danger"
+        confirmText="Delete Material"
+        isLoading={isDeletingItem}
+        details={
+          deletingItem
+            ? [
+                { label: 'Material Name', value: deletingItem.name },
+                { label: 'Category', value: deletingItem.category },
+                { label: 'Current Stock', value: `${deletingItem.totalStock} ${deletingItem.unit}` },
+                { label: 'Site / Location', value: deletingItem.site },
+              ]
+            : []
+        }
+      />
     </div>
   );
 };

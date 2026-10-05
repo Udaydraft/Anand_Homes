@@ -29,6 +29,7 @@ import {
   ProjectMaster,
 } from '@project/shared';
 import { useDashboardContext } from '../context/DashboardContext';
+import { ConfirmationModal, DetailItem } from '../components/common';
 
 const CATEGORIES = [
   'Cement',
@@ -88,6 +89,41 @@ export const MaterialMovementPage: React.FC = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [projects, setProjects] = useState<ProjectMaster[]>([]);
 
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning' | 'info' | 'success';
+    confirmText: string;
+    details?: DetailItem[];
+    action: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'info',
+    confirmText: 'Confirm',
+    action: async () => {},
+  });
+  const [confirmLoading, setConfirmLoading] = useState(false);
+
+  const closeConfirm = () => {
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleConfirmAction = async () => {
+    try {
+      setConfirmLoading(true);
+      await confirmModal.action();
+      closeConfirm();
+    } catch (err: any) {
+      console.error('Confirmation action failed:', err);
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
   // Inward states
   const [inwardEntries, setInwardEntries] = useState<InwardMaterialEntry[]>([]);
   const [stockMaterials, setStockMaterials] = useState<InventoryItem[]>([]);
@@ -96,6 +132,7 @@ export const MaterialMovementPage: React.FC = () => {
   const [inwardFilterSite, setInwardFilterSite] = useState<string>('All');
   const [inwardSearch, setInwardSearch] = useState('');
   const [inwardSuccessCode, setInwardSuccessCode] = useState<string | null>(null);
+  const [inwardError, setInwardError] = useState<string | null>(null);
 
   // Inward Form states
   const [inDate, setInDate] = useState(new Date().toISOString().split('T')[0]);
@@ -243,41 +280,61 @@ export const MaterialMovementPage: React.FC = () => {
     }
   };
 
-  // Inward Form Submission
-  const handleInwardSubmit = async (e: React.FormEvent) => {
+  // Inward Form Submission with Confirmation
+  const handleInwardSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setInwardError(null);
     const qtyNum = parseFloat(inQuantity);
     const totalValNum = parseFloat(inTotalValue);
 
     if (!inSite.trim() || !inMaterial.trim() || isNaN(qtyNum) || qtyNum <= 0) {
-      alert('Please fill in valid site, material, and positive quantity.');
+      setInwardError('Please fill in a valid site, material, and positive quantity.');
       return;
     }
 
-    try {
-      setInwardSubmitting(true);
-      const res = await constructionService.createMaterialInward({
-        date: inDate,
-        site: inSite,
-        category: inCategory,
-        material: inMaterial.trim(),
-        quantity: qtyNum,
-        measurement: inMeasurement,
-        totalValue: isNaN(totalValNum) ? 0 : totalValNum,
-      });
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Material Inward Receipt',
+      message: `Are you sure you want to verify and record this incoming delivery? The site inventory and stock records will be updated immediately.`,
+      variant: 'info',
+      confirmText: 'Confirm & Save Receipt',
+      details: [
+        { label: 'Delivery Date', value: inDate },
+        { label: 'Site / Location', value: inSite },
+        { label: 'Material & Category', value: `${inMaterial.trim()} (${inCategory})` },
+        { label: 'Received Quantity', value: `${qtyNum} ${inMeasurement}` },
+        {
+          label: 'Total Value (Estimated)',
+          value: !isNaN(totalValNum) && totalValNum > 0 ? `₹${totalValNum.toLocaleString('en-IN')}` : '₹0',
+        },
+      ],
+      action: async () => {
+        setInwardSubmitting(true);
+        try {
+          const res = await constructionService.createMaterialInward({
+            date: inDate,
+            site: inSite,
+            category: inCategory,
+            material: inMaterial.trim(),
+            quantity: qtyNum,
+            measurement: inMeasurement,
+            totalValue: isNaN(totalValNum) ? 0 : totalValNum,
+          });
 
-      const entryCode = res.entryCode || `INW-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-XXXX`;
-      setInwardSuccessCode(entryCode);
+          const entryCode = res.entryCode || `INW-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-XXXX`;
+          setInwardSuccessCode(entryCode);
 
-      handleInwardReset();
-      await fetchData();
-      await refreshData();
-    } catch (err: any) {
-      console.error('Failed to record inward material:', err);
-      alert(err.response?.data?.message || 'Failed to save material inward entry.');
-    } finally {
-      setInwardSubmitting(false);
-    }
+          handleInwardReset();
+          await fetchData();
+          await refreshData();
+        } catch (err: any) {
+          console.error('Failed to record inward material:', err);
+          setInwardError(err.response?.data?.message || 'Failed to save material inward entry.');
+        } finally {
+          setInwardSubmitting(false);
+        }
+      },
+    });
   };
 
   // Inward Quick Fill from Dispatched Request
@@ -301,8 +358,8 @@ export const MaterialMovementPage: React.FC = () => {
     setInMeasurement('Bags');
   };
 
-  // Outward Form Submission
-  const handleOutwardSubmit = async (e: React.FormEvent) => {
+  // Outward Form Submission with Confirmation
+  const handleOutwardSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setOutwardError(null);
     setOutwardSuccess(null);
@@ -320,33 +377,55 @@ export const MaterialMovementPage: React.FC = () => {
       return;
     }
 
-    try {
-      setOutwardSubmitting(true);
-      await constructionService.createMaterialOutward({
-        date: outDate,
-        site: outSite,
-        project: outProject,
-        material: outMaterial.trim(),
-        natureOfWork: outNatureOfWork,
-        quantity: qtyNum,
-        measurement: outMeasurement,
-      });
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Material Outward Issue',
+      message: `Are you sure you want to log this material issue? The quantity will be deducted from site inventory.`,
+      variant: 'warning',
+      confirmText: 'Confirm & Deduct Stock',
+      details: [
+        { label: 'Disbursement Date', value: outDate },
+        { label: 'Issuing Site', value: outSite },
+        { label: 'Target Project', value: outProject },
+        { label: 'Material & Quantity', value: `${outMaterial} - ${qtyNum} ${outMeasurement}` },
+        { label: 'Nature of Work', value: outNatureOfWork },
+        {
+          label: 'Remaining Stock After',
+          value: selectedInventoryStock
+            ? `${selectedInventoryStock.totalStock - qtyNum} ${selectedInventoryStock.unit}`
+            : 'N/A',
+        },
+      ],
+      action: async () => {
+        setOutwardSubmitting(true);
+        try {
+          await constructionService.createMaterialOutward({
+            date: outDate,
+            site: outSite,
+            project: outProject,
+            material: outMaterial.trim(),
+            natureOfWork: outNatureOfWork,
+            quantity: qtyNum,
+            measurement: outMeasurement,
+          });
 
-      setOutwardSuccess(
-        `Outward dispatch of ${qtyNum} ${outMeasurement} of "${outMaterial}" successfully recorded and deducted from site stock!`
-      );
-      handleOutwardReset();
-      await fetchData();
-      if (outSite) {
-        await loadSiteInventory(outSite);
-      }
-      await refreshData();
-    } catch (err: any) {
-      console.error('Failed to record outward material:', err);
-      setOutwardError(err.response?.data?.message || 'Failed to record outward material.');
-    } finally {
-      setOutwardSubmitting(false);
-    }
+          setOutwardSuccess(
+            `Outward dispatch of ${qtyNum} ${outMeasurement} of "${outMaterial}" successfully recorded and deducted from site stock!`
+          );
+          handleOutwardReset();
+          await fetchData();
+          if (outSite) {
+            await loadSiteInventory(outSite);
+          }
+          await refreshData();
+        } catch (err: any) {
+          console.error('Failed to record outward material:', err);
+          setOutwardError(err.response?.data?.message || 'Failed to record outward material.');
+        } finally {
+          setOutwardSubmitting(false);
+        }
+      },
+    });
   };
 
   const handleOutwardReset = () => {
@@ -483,6 +562,23 @@ export const MaterialMovementPage: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'inward' && (
         <div className="space-y-6">
+          {/* Error Banner */}
+          {inwardError && (
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between gap-3 text-rose-800 animate-in fade-in">
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <span className="text-sm font-semibold">{inwardError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInwardError(null)}
+                className="text-xs font-bold text-rose-700 hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
           {/* Success Code Banner */}
           {inwardSuccessCode && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-3 text-emerald-800 animate-in fade-in">
@@ -1123,6 +1219,19 @@ export const MaterialMovementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Movement Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirm}
+        onConfirm={handleConfirmAction}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        confirmText={confirmModal.confirmText}
+        details={confirmModal.details}
+        isLoading={confirmLoading}
+      />
     </div>
   );
 };

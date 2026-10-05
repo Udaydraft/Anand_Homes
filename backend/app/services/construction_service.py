@@ -640,11 +640,18 @@ class ConstructionService:
             return_document=True,
         )
         if res:
+            site_val = res.get("site", "All Sites")
+            mat_val = res.get("material", "Material")
+            qty_val = res.get("quantity", "")
+            unit_val = res.get("unit", "")
+            action_verb = "accepted & approved" if status == "Approved" else "declined" if status == "Rejected" else status
             await self.log_activity(
-                text=f"Material request {res.get('requestId')}: {status}",
-                subtext=f"Material: {res.get('material')} | Site: {res.get('site')}",
-                site=res.get("site", "All Sites"),
+                text=f"Material Request {res.get('requestId')}: {status} by Admin",
+                subtext=f"Admin {action_verb} request for {qty_val} {unit_val} of {mat_val} at {site_val}.",
+                site=site_val,
                 act_type="request",
+                actor="Admin",
+                target_role="supervisor",
             )
             await self._persist()
             return MaterialRequestResponse(**self._doc_to_res(res))
@@ -818,10 +825,10 @@ class ConstructionService:
 
         # 5. Log activity for both Supervisor and Admin
         await self.log_activity(
-            text=f"Material Outward: {qty} {unit} of {material_name} dispatched to Supervisor",
-            subtext=f"Site: {site_name} | Ref: {req_id_str} | Dispatched by: {admin_name}",
+            text=f"🚚 Supplies Dispatched: {qty} {unit} of {material_name}",
+            subtext=f"Admin {admin_name} dispatched request {req_id_str} to {site_name}. Delivery is in transit. Please verify and record Inward receipt upon arrival.",
             site=site_name,
-            act_type="stock_out",
+            act_type="dispatch",
             actor=admin_name,
             target_role="supervisor",
         )

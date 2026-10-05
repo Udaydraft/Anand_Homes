@@ -121,6 +121,13 @@ export const SupervisorDashboard: React.FC = () => {
     ? labourEntries.filter((e) => e.site === siteName || e.project === siteName)
     : labourEntries;
 
+  // Real-time dispatched materials awaiting site verification
+  const dispatchedForSite = materialRequests.filter(
+    (r) =>
+      (!siteName || r.site === siteName) &&
+      (r.status === 'Approved' || (r.status as string) === 'Dispatched')
+  );
+
   return (
     <div className="space-y-6">
       {/* Top Header Greeting & Role Badge */}
@@ -238,6 +245,50 @@ export const SupervisorDashboard: React.FC = () => {
             >
               Refresh Status
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Real-time Alert Banner: Dispatched Materials from Admin Ready to Inward */}
+      {dispatchedForSite.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-100/70 border-2 border-emerald-300/90 rounded-2xl p-5 shadow-sm animate-in fade-in duration-200">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-[#0D5C3A] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-emerald-100">
+                <Truck className="w-6 h-6 animate-pulse text-emerald-200" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider bg-[#0D5C3A] text-white px-2.5 py-0.5 rounded-full shadow-2xs">
+                    Admin Dispatched Materials!
+                  </span>
+                  <span className="text-xs text-emerald-900 font-bold">
+                    {dispatchedForSite.length} Requisition{dispatchedForSite.length > 1 ? 's' : ''} Approved & On The Way
+                  </span>
+                </div>
+                <h3 className="text-sm font-extrabold text-slate-900 mt-1">
+                  Supplies Sent by Central Admin for {siteName || 'your site'}
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                  Admin has accepted and dispatched supplies for:{' '}
+                  <strong className="text-emerald-950 font-bold">
+                    {dispatchedForSite.map((r) => `${r.dispatchedQty || r.quantity} ${r.unit} ${r.material}`).join(', ')}
+                  </strong>.
+                  Once the transport arrives on-site, verify the batch and record Inward entry to update your site stock balance.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
+              <Link
+                to="/material-inward?tab=inward"
+                className="px-4 py-2.5 bg-[#0D5C3A] hover:bg-[#094228] text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-2"
+              >
+                <ArrowDownToLine className="w-4 h-4 text-emerald-300" />
+                <span>Verify & Record Inward</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
       )}

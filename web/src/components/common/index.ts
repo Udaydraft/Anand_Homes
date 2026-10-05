@@ -7,3 +7,4 @@ export * from './PageContainer';
 export * from './DatabaseStatusBadge';
 export * from './ErrorBoundary';
 export * from './ImageUploadField';
+export * from './ConfirmationModal';

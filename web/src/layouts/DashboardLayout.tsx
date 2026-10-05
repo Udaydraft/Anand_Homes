@@ -64,7 +64,21 @@ export const DashboardLayout: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
 
-  const notifications = activities.slice(0, 8).map((act, idx) => ({
+  const isAdmin = user?.role === 'admin' || roleMode === 'admin' || user?.email?.toLowerCase().includes('admin@');
+  const userRole = isAdmin ? 'Super Admin' : 'Site Supervisor';
+  const userName = user?.name || (isAdmin ? 'Admin User' : 'Site Supervisor');
+  const userEmail = user?.email || (isAdmin ? 'admin@anandhomes.com' : 'supervisor@anandhomes.com');
+
+  const relevantActivities = isAdmin
+    ? activities
+    : activities.filter(
+        (a) =>
+          a.targetRole === 'supervisor' ||
+          a.actor === 'Admin' ||
+          (a.site && sitesList.includes(a.site))
+      );
+
+  const notifications = relevantActivities.slice(0, 10).map((act, idx) => ({
     id: act.id || String(idx),
     title: act.text,
     desc: act.subtext || (act.words ? `Message: ${act.words}` : `Site: ${act.site}`),
@@ -72,12 +86,11 @@ export const DashboardLayout: React.FC = () => {
     time: act.time,
     actor: act.actor,
     unread: idx < 3,
+    isDispatch:
+      act.text.toLowerCase().includes('dispatched') ||
+      act.text.toLowerCase().includes('approved') ||
+      act.type === 'dispatch',
   }));
-
-  const isAdmin = user?.role === 'admin' || roleMode === 'admin' || user?.email?.toLowerCase().includes('admin@');
-  const userRole = isAdmin ? 'Super Admin' : 'Site Supervisor';
-  const userName = user?.name || (isAdmin ? 'Admin User' : 'Site Supervisor');
-  const userEmail = user?.email || (isAdmin ? 'admin@anandhomes.com' : 'supervisor@anandhomes.com');
 
   // Navigation items strictly tailored to the streamlined workflow
   const adminNavItems: NavItem[] = [
@@ -313,33 +326,63 @@ export const DashboardLayout: React.FC = () => {
               >
                 <Bell className="w-4 h-4" />
                 {notifications.some((n) => n.unread) && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white flex items-center justify-center text-[8px] text-white font-bold" />
+                  <>
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping opacity-75" />
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-600 ring-2 ring-white" />
+                  </>
                 )}
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50">
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
-                    <span className="text-xs font-bold text-slate-800">Notifications</span>
+                    <span className="text-xs font-bold text-slate-800">
+                      Notifications {!isAdmin && '(Supervisor Portal)'}
+                    </span>
                     {notifications.length > 0 && (
                       <span className="text-[10px] text-[#0D5C3A] font-semibold cursor-pointer">Mark all as read</span>
                     )}
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
                     {notifications.length === 0 ? (
                       <p className="text-center py-6 text-xs text-slate-400">No new notifications</p>
                     ) : (
                       notifications.map((n) => (
-                        <div key={n.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs hover:bg-slate-100 transition-colors">
+                        <div
+                          key={n.id}
+                          className={`p-3 rounded-xl border text-xs transition-colors ${
+                            n.isDispatch
+                              ? 'bg-emerald-50/70 border-emerald-200'
+                              : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+                          }`}
+                        >
                           <div className="flex items-center justify-between gap-1 mb-1">
-                            <span className="font-bold text-slate-800 text-xs line-clamp-1">{n.title}</span>
+                            <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5 line-clamp-1">
+                              {n.isDispatch && <Truck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                              <span>{n.title}</span>
+                            </span>
                             <span className="text-[10px] text-slate-400 shrink-0">{n.time}</span>
                           </div>
-                          <p className="text-[11px] text-slate-600 leading-snug line-clamp-2">{n.desc}</p>
-                          <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100/60 text-[10px]">
-                            <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">{n.site}</span>
+                          <p className="text-[11px] text-slate-600 leading-snug">{n.desc}</p>
+
+                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200/60 text-[10px]">
+                            <span className="font-semibold text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-200">
+                              {n.site}
+                            </span>
                             {n.actor && <span className="text-slate-400 font-medium">By {n.actor}</span>}
                           </div>
+
+                          {/* Quick action button for supervisor to confirm inward receipt */}
+                          {n.isDispatch && !isAdmin && (
+                            <Link
+                              to="/material-inward?tab=inward"
+                              onClick={() => setShowNotifications(false)}
+                              className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#0D5C3A] hover:bg-[#094228] text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all"
+                            >
+                              <ArrowDownToLine className="w-3 h-3 text-emerald-300" />
+                              <span>Verify & Record Inward Receipt</span>
+                            </Link>
+                          )}
                         </div>
                       ))
                     )}

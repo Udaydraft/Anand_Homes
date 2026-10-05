@@ -21,11 +21,15 @@ import {
   Calendar,
   Layers,
   AlertTriangle,
+  ArrowDownToLine,
+  Trash2,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { constructionService } from '../services/construction.service';
 import { MaterialRequest, Site, InventoryMasterItem } from '@project/shared';
 import { useAuth } from '../hooks/useAuth';
 import { useDashboardContext } from '../context/DashboardContext';
+import { ConfirmationModal, ConfirmationVariant, DetailItem } from '../components/common';
 
 const URGENCY_OPTIONS = ['Normal', 'High', 'Urgent'];
 const MEASUREMENT_OPTIONS = ['Bags', 'Tons', 'Nos', 'Kg', 'Litres', 'Sq.Ft', 'Cum', 'Rft'];
@@ -179,20 +183,6 @@ export const MaterialRequestsPage: React.FC = () => {
     }
   };
 
-  const handleRejectStatus = async (id: string) => {
-    try {
-      await constructionService.updateRequestStatus(id, 'Rejected');
-      setRequests((prev) =>
-        prev.map((r) => (r.id === id || r.requestId === id ? { ...r, status: 'Rejected' } : r))
-      );
-      setSuccessText('Request rejected.');
-      setTimeout(() => setSuccessText(null), 3000);
-      await refreshData();
-    } catch (err) {
-      console.error('Failed to update request status:', err);
-    }
-  };
-
   const openDispatchModal = (req: MaterialRequest) => {
     setDispatchModalReq(req);
     setDispatchQty(req.quantity.toString());
@@ -218,56 +208,157 @@ export const MaterialRequestsPage: React.FC = () => {
     setStockInvoice('');
     setStockUnitPrice('');
   };
+  // Confirmation Modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    variant: ConfirmationVariant;
+    details?: DetailItem[];
+    onConfirm: () => Promise<void> | void;
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'warning',
+    onConfirm: () => {},
+  });
+
+  const handleRejectStatus = (req: MaterialRequest) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Decline Material Request',
+      message: `Are you sure you want to decline this material requisition for ${req.quantity} ${req.unit} of ${req.material}? The site supervisor will be notified immediately.`,
+      confirmText: 'Decline Request',
+      variant: 'warning',
+      details: [
+        { label: 'Request ID', value: req.requestId || req.id },
+        { label: 'Site', value: req.site },
+        { label: 'Material', value: req.material },
+        { label: 'Requested Qty', value: `${req.quantity} ${req.unit}` },
+        { label: 'Purpose', value: req.purpose || 'Not specified' },
+      ],
+      onConfirm: async () => {
+        try {
+          setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
+          const reqId = req.id || req.requestId;
+          await constructionService.updateRequestStatus(reqId, 'Rejected');
+          setRequests((prev) =>
+            prev.map((r) =>
+              r.id === reqId || r.requestId === reqId ? { ...r, status: 'Rejected' } : r
+            )
+          );
+          setSuccessText(`Request ${req.requestId} declined.`);
+          setTimeout(() => setSuccessText(null), 4000);
+          await fetchRequestsData();
+          await refreshData();
+        } catch (err: any) {
+          setErrorText(err.response?.data?.message || 'Failed to update request status.');
+        } finally {
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+        }
+      },
+    });
+  };
+
+  const handleDeleteRequest = (req: MaterialRequest) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Material Request',
+      message: `Are you sure you want to permanently delete request ${req.requestId || req.id}? This action cannot be reversed.`,
+      confirmText: 'Delete Permanently',
+      variant: 'danger',
+      details: [
+        { label: 'Request ID', value: req.requestId || req.id },
+        { label: 'Site', value: req.site },
+        { label: 'Material', value: `${req.quantity} ${req.unit} of ${req.material}` },
+      ],
+      onConfirm: async () => {
+        try {
+          setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
+          const reqId = req.id || req.requestId;
+          await constructionService.deleteRequest(reqId);
+          setRequests((prev) => prev.filter((r) => r.id !== reqId && r.requestId !== reqId));
+          setSuccessText(`Request deleted successfully.`);
+          setTimeout(() => setSuccessText(null), 4000);
+          await fetchRequestsData();
+          await refreshData();
+        } catch (err: any) {
+          setErrorText(err.response?.data?.message || 'Failed to delete request.');
+        } finally {
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+        }
+      },
+    });
+  };
 
   const handleConfirmDispatch = async () => {
     if (!dispatchModalReq) return;
+    const reqId = dispatchModalReq.id || dispatchModalReq.requestId;
     const qtyNum = parseFloat(dispatchQty);
-    if (isNaN(qtyNum) || qtyNum <= 0) {
-      alert('Please enter a valid dispatch quantity.');
-      return;
-    }
-
     const addQtyNum = needAddStock && addStockQty ? parseFloat(addStockQty) : undefined;
-    if (needAddStock && (addQtyNum === undefined || isNaN(addQtyNum) || addQtyNum <= 0)) {
-      alert('Please enter a valid quantity to add to stock.');
-      return;
-    }
+    const priceNum = needAddStock && stockUnitPrice ? parseFloat(stockUnitPrice) : undefined;
 
     try {
       setDispatching(true);
-      const updated = await constructionService.sendMaterialsToSupervisor(
-        dispatchModalReq.id || dispatchModalReq.requestId,
-        {
-          quantity: qtyNum,
-          notes: dispatchNotes,
-          supplierOrStore: dispatchStore,
-          addStockQuantity: needAddStock ? addQtyNum : undefined,
-          supplier: needAddStock ? stockSupplier.trim() || undefined : undefined,
-          invoiceNo: needAddStock ? stockInvoice.trim() || undefined : undefined,
-          unitPrice: needAddStock && stockUnitPrice ? parseFloat(stockUnitPrice) : undefined,
-        }
-      );
-
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === updated.id || r.requestId === updated.requestId ? updated : r
-        )
-      );
+      await constructionService.sendMaterialsToSupervisor(reqId, {
+        quantity: qtyNum,
+        notes: dispatchNotes.trim() || undefined,
+        supplierOrStore: dispatchStore.trim() || undefined,
+        addStockQuantity: addQtyNum,
+        supplier: stockSupplier.trim() || undefined,
+        invoiceNo: stockInvoice.trim() || undefined,
+        unitPrice: priceNum,
+      });
 
       setSuccessText(
-        needAddStock
-          ? `Added ${addQtyNum} ${dispatchModalReq.unit} to stock and dispatched ${qtyNum} ${dispatchModalReq.unit} of ${dispatchModalReq.material} to ${dispatchModalReq.site}!`
-          : `Dispatched ${qtyNum} ${dispatchModalReq.unit} of ${dispatchModalReq.material} to ${dispatchModalReq.site}!`
+        `Dispatched ${qtyNum} ${dispatchModalReq.unit} of ${dispatchModalReq.material} to ${dispatchModalReq.site}! Dispatched alert notice sent to site supervisor.`
       );
       setDispatchModalReq(null);
-      setTimeout(() => setSuccessText(null), 6000);
+      setTimeout(() => setSuccessText(null), 5000);
       await fetchRequestsData();
       await refreshData();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to dispatch materials to supervisor.');
+      setErrorText(err.response?.data?.message || 'Failed to dispatch materials.');
     } finally {
       setDispatching(false);
     }
+  };
+
+  const triggerDispatchWithConfirm = () => {
+    if (!dispatchModalReq) return;
+    const qtyNum = parseFloat(dispatchQty);
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      setErrorText('Please enter a valid dispatch quantity.');
+      return;
+    }
+    const addQtyNum = needAddStock && addStockQty ? parseFloat(addStockQty) : undefined;
+    if (needAddStock && (addQtyNum === undefined || isNaN(addQtyNum) || addQtyNum <= 0)) {
+      setErrorText('Please enter a valid quantity to add to stock.');
+      return;
+    }
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Confirm Material Dispatch',
+      message: `Are you sure you want to dispatch ${qtyNum} ${dispatchModalReq.unit} of ${dispatchModalReq.material} to ${dispatchModalReq.site}? This will deduct central storage, log an Outward dispatch, and notify the site supervisor.`,
+      confirmText: 'Confirm & Dispatch',
+      variant: 'success',
+      details: [
+        { label: 'Destination Site', value: dispatchModalReq.site },
+        { label: 'Material', value: dispatchModalReq.material },
+        { label: 'Dispatch Quantity', value: `${qtyNum} ${dispatchModalReq.unit}` },
+        { label: 'Source', value: dispatchStore },
+        ...(needAddStock ? [{ label: 'Restock Central Store', value: `+${addQtyNum} ${dispatchModalReq.unit}` }] : []),
+      ],
+      onConfirm: async () => {
+        await handleConfirmDispatch();
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   // Filter requests
@@ -703,6 +794,15 @@ export const MaterialRequestsPage: React.FC = () => {
                           {req.dispatchedOn && (
                             <p className="text-[10px] text-slate-400">On: {req.dispatchedOn}</p>
                           )}
+                          {isSupervisor && (
+                            <Link
+                              to="/material-inward?tab=inward"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#0D5C3A] hover:bg-[#094228] text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all mt-1.5"
+                            >
+                              <ArrowDownToLine className="w-3 h-3 text-emerald-300" />
+                              <span>Confirm Inward at Site</span>
+                            </Link>
+                          )}
                         </div>
                       ) : req.status === 'Rejected' ? (
                         <div>
@@ -737,7 +837,7 @@ export const MaterialRequestsPage: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleRejectStatus(req.id || req.requestId)}
+                              onClick={() => handleRejectStatus(req)}
                               className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg border border-rose-200 transition-colors flex items-center gap-1"
                               title="Reject request"
                             >
@@ -751,7 +851,17 @@ export const MaterialRequestsPage: React.FC = () => {
                             <span>Sent to Supervisor</span>
                           </span>
                         ) : (
-                          <span className="text-xs text-slate-400 font-medium">Closed</span>
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="text-xs text-slate-400 font-medium">Closed</span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRequest(req)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                              title="Delete Request"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         )}
                       </td>
                     )}
@@ -1017,7 +1127,7 @@ export const MaterialRequestsPage: React.FC = () => {
               <button
                 type="button"
                 disabled={dispatching}
-                onClick={handleConfirmDispatch}
+                onClick={triggerDispatchWithConfirm}
                 className="px-5 py-2.5 bg-[#0D5C3A] hover:bg-[#0b4e31] text-white text-sm font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 {dispatching ? (
@@ -1038,6 +1148,20 @@ export const MaterialRequestsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Reusable Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        details={confirmDialog.details}
+        isLoading={confirmDialog.isLoading}
+      />
     </div>
   );
 };
