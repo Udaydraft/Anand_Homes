@@ -17,12 +17,16 @@ import {
   Shield,
   Clock,
   Layers,
+  AlertTriangle,
+  BarChart3,
 } from 'lucide-react';
 import { constructionService } from '../services/construction.service';
 import { ProjectMaster, SupervisorMaster, ProjectDuration, LabourEntry } from '@project/shared';
 import { ConfirmationModal, DetailItem } from '../components/common';
+import { LowStockAlertsPage } from './LowStockAlertsPage';
+import { ReportsPage } from './ReportsPage';
 
-type TabType = 'all-in-one' | 'projects' | 'supervisors' | 'durations' | 'labour';
+type TabType = 'all-in-one' | 'projects' | 'supervisors' | 'durations' | 'labour' | 'low-stock' | 'reports';
 
 export const ProjectMasterPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -42,6 +46,7 @@ export const ProjectMasterPage: React.FC = () => {
   const [projects, setProjects] = useState<ProjectMaster[]>([]);
   const [supervisors, setSupervisors] = useState<SupervisorMaster[]>([]);
   const [durations, setDurations] = useState<ProjectDuration[]>([]);
+  const [lowStockCount, setLowStockCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -137,16 +142,18 @@ export const ProjectMasterPage: React.FC = () => {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      const [projData, supData, durData, labData] = await Promise.all([
+      const [projData, supData, durData, labData, lowStockData] = await Promise.all([
         constructionService.getProjectsMaster(),
         constructionService.getSupervisorsMaster(),
         constructionService.getProjectDurations(),
         constructionService.getLabourEntries(),
+        constructionService.getLowStock().catch(() => []),
       ]);
       setProjects(projData || []);
       setSupervisors(supData || []);
       setDurations(durData || []);
       setLabourEntries(labData || []);
+      setLowStockCount(Array.isArray(lowStockData) ? lowStockData.length : 0);
 
       if (projData && projData.length > 0) {
         if (!sProject) {
@@ -176,7 +183,7 @@ export const ProjectMasterPage: React.FC = () => {
   // Update tab if URL param changes externally
   useEffect(() => {
     const tabParam = searchParams.get('tab') as TabType;
-    if (tabParam && ['all-in-one', 'projects', 'supervisors', 'durations', 'labour'].includes(tabParam)) {
+    if (tabParam && ['all-in-one', 'projects', 'supervisors', 'durations', 'labour', 'low-stock', 'reports'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -498,7 +505,7 @@ export const ProjectMasterPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 4 Quick Counters */}
+        {/* 5 Quick Counters */}
         <div className="flex items-center gap-3 shrink-0 flex-wrap">
           <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-100 text-center">
             <span className="text-xs text-slate-500 block font-medium">Projects</span>
@@ -515,6 +522,14 @@ export const ProjectMasterPage: React.FC = () => {
           <div className="px-3.5 py-2 rounded-xl bg-amber-50/60 border border-amber-100 text-center">
             <span className="text-xs text-amber-800 block font-medium">Labour Logs</span>
             <span className="text-base font-extrabold text-amber-900">{labourEntries.length}</span>
+          </div>
+          <div
+            onClick={() => handleTabChange('low-stock')}
+            className="px-3.5 py-2 rounded-xl bg-rose-50/60 border border-rose-100 text-center cursor-pointer hover:bg-rose-100/70 transition-colors"
+            title="Click to view Low Stock Alerts"
+          >
+            <span className="text-xs text-rose-800 block font-medium">Low Stock</span>
+            <span className="text-base font-extrabold text-rose-700">{lowStockCount}</span>
           </div>
         </div>
       </div>
@@ -580,9 +595,36 @@ export const ProjectMasterPage: React.FC = () => {
           <HardHat className="w-3.5 h-3.5 text-amber-400" />
           <span>4. Labour Entry ({labourEntries.length})</span>
         </button>
-      </div>
 
+        {/* <button
+          onClick={() => handleTabChange('low-stock')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            activeTab === 'low-stock'
+              ? 'bg-[#0A3925] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+          }`}
+        >
+          <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+          <span>5. Low Stock Alerts</span>
+          {lowStockCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-500 text-white">
+              {lowStockCount}
+            </span>
+          )}
+        </button>
 
+        <button
+          onClick={() => handleTabChange('reports')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            activeTab === 'reports'
+              ? 'bg-[#0A3925] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+          }`}
+        >
+          <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
+          <span>6. Reports & Audit</span>
+        </button>*/}
+      </div> 
 
       {/* ===================================================================== */}
       {/* TAB 1: ALL-IN-ONE COMPLETE PROJECT SETUP (USER EXPERIENCE HIGHLIGHT)    */}
@@ -926,7 +968,21 @@ export const ProjectMasterPage: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-slate-400">{p.createdOn || '-'}</td>
-                        <td className="px-4 py-3 text-right space-x-2">
+                        <td className="px-4 py-3 text-right space-x-1.5">
+                          <button
+                            onClick={() => handleTabChange('low-stock')}
+                            className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
+                            title="Check Low Stock for this site"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleTabChange('reports')}
+                            className="p-1.5 hover:bg-emerald-50 text-[#0D5C3A] rounded-lg transition-colors"
+                            title="View Reports for this site"
+                          >
+                            <BarChart3 className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={() => {
                               setPEditingId(p.id);
@@ -1535,6 +1591,24 @@ export const ProjectMasterPage: React.FC = () => {
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 5: LOW STOCK ALERTS                                               */}
+      {/* ===================================================================== */}
+      {activeTab === 'low-stock' && (
+        <div className="space-y-4">
+          <LowStockAlertsPage />
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 6: REPORTS & AUDIT                                                */}
+      {/* ===================================================================== */}
+      {activeTab === 'reports' && (
+        <div className="space-y-4">
+          <ReportsPage />
         </div>
       )}
 

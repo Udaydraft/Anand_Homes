@@ -196,7 +196,7 @@ export const LowStockAlertsPage: React.FC = () => {
       {/* Bottom Actions */}
       <div className="pt-2 flex items-center justify-between">
         <Link
-          to="/reports"
+          to="/projects?tab=reports"
           className="inline-flex items-center gap-2 text-xs font-bold text-[#0D5C3A] hover:underline"
         >
           <BarChart3 className="w-4 h-4" />

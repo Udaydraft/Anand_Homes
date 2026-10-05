@@ -90,12 +90,12 @@ export const App: React.FC = () => {
                 <Route path="/sites" element={<Navigate to="/projects" replace />} />
                 <Route path="/my-site" element={<MySitePage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
-                <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/low-stock" element={<LowStockAlertsPage />} />
+                <Route path="/reports" element={<Navigate to="/projects?tab=reports" replace />} />
+                <Route path="/low-stock" element={<Navigate to="/projects?tab=low-stock" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/users" element={<Navigate to="/supervisors" replace />} />
                 <Route path="/settings" element={<ProfilePage />} />
-                <Route path="/notifications" element={<LowStockAlertsPage />} />
+                <Route path="/notifications" element={<Navigate to="/projects?tab=low-stock" replace />} />
               </Route>
 
               {/* Dedicated Error / System Routes */}

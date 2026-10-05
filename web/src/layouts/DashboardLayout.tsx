@@ -99,8 +99,6 @@ export const DashboardLayout: React.FC = () => {
     { label: 'Material Inward & Outward', path: '/material-inward', icon: ArrowLeftRight },
     { label: 'Material Requests', path: '/material-requests', icon: FileSpreadsheet },
     { label: 'Stock Balance Tracking', path: '/inventory', icon: Package },
-    { label: 'Low Stock Alerts', path: '/low-stock', icon: AlertTriangle },
-    { label: 'Reports & Audit', path: '/reports', icon: BarChart3 },
   ];
 
   const supervisorNavItems: NavItem[] = [
@@ -110,7 +108,6 @@ export const DashboardLayout: React.FC = () => {
     { label: 'Request Materials', path: '/material-requests', icon: FileSpreadsheet },
     { label: 'Labour Entry', path: '/projects?tab=labour', icon: HardHat },
     { label: 'Inventory Balance', path: '/inventory', icon: Package },
-    { label: 'Low Stock Warnings', path: '/low-stock', icon: AlertTriangle },
   ];
 
   const navItems = isAdmin ? adminNavItems : supervisorNavItems;
@@ -120,7 +117,11 @@ export const DashboardLayout: React.FC = () => {
     if (p === '/admin/dashboard') return 'Super Admin Dashboard';
     if (p === '/supervisor/dashboard') return 'Site Supervisor Dashboard';
     if (p === '/dashboard' || p === '/') return isAdmin ? 'Super Admin Dashboard' : 'Site Supervisor Dashboard';
-    if (p.includes('/projects') || p.includes('/supervisors') || p.includes('/project-duration')) return 'Project & Site Master';
+    if (p.includes('/projects') || p.includes('/supervisors') || p.includes('/project-duration')) {
+      if (location.search.includes('tab=reports')) return 'Reports & Audit Trail';
+      if (location.search.includes('tab=low-stock')) return 'Low Stock Alerts';
+      return 'Project & Site Master';
+    }
     if (p.includes('/my-site')) return 'My Project Site';
     if (p.includes('/material-inward') || p.includes('/material-outward') || p.includes('/material-movement')) return 'Material Inward & Outward Movement';
     if (p.includes('/material-requests')) return 'Site-Wise Material Requests';

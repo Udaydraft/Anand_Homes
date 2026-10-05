@@ -278,7 +278,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
             <span className="text-slate-400">Audited Valuation</span>
-            <Link to="/reports" className="text-[#0D5C3A] font-bold hover:underline flex items-center gap-1">
+            <Link to="/projects?tab=reports" className="text-[#0D5C3A] font-bold hover:underline flex items-center gap-1">
               <span>Reports</span>
               <ChevronRight className="w-3 h-3" />
             </Link>
@@ -303,7 +303,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
             <span className="text-slate-400">Safety Buffer</span>
-            <Link to="/low-stock" className="text-[#0D5C3A] font-bold hover:underline flex items-center gap-1">
+            <Link to="/projects?tab=low-stock" className="text-[#0D5C3A] font-bold hover:underline flex items-center gap-1">
               <span>Alerts</span>
               <ChevronRight className="w-3 h-3" />
             </Link>
@@ -474,7 +474,7 @@ export const AdminDashboard: React.FC = () => {
                 <span>Send Notice</span>
               </button>
               <Link
-                to="/reports"
+                to="/projects?tab=reports"
                 className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition-colors text-center"
               >
                 <Download className="w-4 h-4 text-emerald-400 shrink-0" />
