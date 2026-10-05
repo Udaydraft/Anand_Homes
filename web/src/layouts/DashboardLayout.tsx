@@ -75,8 +75,8 @@ export const DashboardLayout: React.FC = () => {
 
   const isAdmin = user?.role === 'admin' || roleMode === 'admin' || user?.email?.toLowerCase().includes('admin@');
   const userRole = isAdmin ? 'Super Admin' : 'Site Supervisor';
-  const userName = user?.name || (isAdmin ? 'Admin User' : 'Rajesh Kumar');
-  const userEmail = user?.email || (isAdmin ? 'admin@anandhomes.com' : 'rajesh.k@anandhomes.com');
+  const userName = user?.name || (isAdmin ? 'Admin User' : 'Site Supervisor');
+  const userEmail = user?.email || (isAdmin ? 'admin@anandhomes.com' : 'supervisor@anandhomes.com');
 
   // Navigation items strictly tailored to the streamlined workflow
   const adminNavItems: NavItem[] = [

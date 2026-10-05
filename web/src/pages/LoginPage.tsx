@@ -47,8 +47,8 @@ export const LoginPage: React.FC = () => {
       setEmail('admin@anandhomes.com');
       setPassword('Password@123');
     } else {
-      setEmail('rajesh.k@anandhomes.com');
-      setPassword('Password@123');
+      setEmail('');
+      setPassword('');
     }
   };
 
