@@ -7,6 +7,7 @@ from app.models.user import UserModel
 from app.schemas.user import (
     ApiResponse,
     AuthResponseData,
+    ForgotPasswordRequest,
     TokenRefreshRequest,
     TokenResponse,
     UserLoginRequest,
@@ -58,6 +59,26 @@ async def login(
     return ApiResponse(
         success=True,
         message="Login successful",
+        data=result,
+    )
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ApiResponse[dict],
+    status_code=status.HTTP_200_OK,
+    summary="Reset / Forgot password",
+    description="Allows users and supervisors to reset their password using their Login ID or email.",
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ApiResponse[dict]:
+    auth_service = AuthService(db)
+    result = await auth_service.reset_password(payload)
+    return ApiResponse(
+        success=True,
+        message=result.get("message", "Password reset successfully"),
         data=result,
     )
 

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDashboardContext } from '../context/DashboardContext';
 import { EmptyState } from '../components/common/EmptyState';
+import { constructionService } from '../services/construction.service';
 import {
   HardHat,
   ArrowDownToLine,
@@ -23,6 +24,10 @@ import {
   Phone,
   Layers,
   ArrowRight,
+  Send,
+  Bell,
+  MessageSquare,
+  X,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 
@@ -33,18 +38,25 @@ export const SupervisorDashboard: React.FC = () => {
     sites,
     inventory,
     lowStockAlerts,
+    inwardEntries,
+    outwardEntries,
     materialRequests,
-    deliveries,
-    photos,
+    labourEntries,
     selectedSite,
     setSelectedSite,
     sitesList,
     myAssignedSites,
+    activities,
     refreshData,
     isLoadingData,
   } = useDashboardContext();
 
-  const supervisorName = user?.name || 'User_Name';
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestText, setRequestText] = useState('');
+  const [requestCategory, setRequestCategory] = useState<'material' | 'work' | 'words'>('material');
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+
+  const supervisorName = user?.name || 'Supervisor';
 
   // Determine active assigned site strictly from supervisor's assigned sites (NO sites[0] auto-assign)
   const myAssignedSite =
@@ -53,6 +65,40 @@ export const SupervisorDashboard: React.FC = () => {
     null;
 
   const siteName = myAssignedSite ? myAssignedSite.name : '';
+  const siteRequests = materialRequests.filter((r) => !siteName || r.site === siteName);
+
+  const handleSendSupervisorRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestText.trim()) return;
+    try {
+      setRequestSubmitting(true);
+      const prefix =
+        requestCategory === 'material'
+          ? 'Material Indent Request'
+          : requestCategory === 'work'
+          ? 'Site Status Update'
+          : 'Supervisor Message';
+      await constructionService.createActivity({
+        text: `${prefix}: ${requestText.trim()}`,
+        site: siteName || (sites[0]?.name || 'My Site'),
+        type: 'request',
+        words: requestText.trim(),
+        actor: supervisorName,
+        targetRole: 'admin',
+      });
+      setRequestText('');
+      setShowRequestModal(false);
+      await refreshData();
+    } catch (err) {
+      console.error('Failed to dispatch request to admin:', err);
+    } finally {
+      setRequestSubmitting(false);
+    }
+  };
+
+  const adminNotices = activities.filter(
+    (act) => act.targetRole === 'supervisor' || act.actor === 'Admin' || act.type === 'delivery'
+  );
 
   // Filter metrics strictly for this assigned site; if no site is assigned, keep arrays empty
   const siteInventory = siteName
@@ -63,20 +109,17 @@ export const SupervisorDashboard: React.FC = () => {
     ? lowStockAlerts.filter((a) => a.site === siteName)
     : [];
 
-  const siteDeliveries = siteName
-    ? deliveries.filter((d) => d.site === siteName)
-    : [];
+  const siteInward = siteName
+    ? inwardEntries.filter((e) => !e.material || e.material.toLowerCase().includes(siteName.toLowerCase()))
+    : inwardEntries;
 
-  const myRequests = siteName
-    ? materialRequests.filter((r) => r.site === siteName)
-    : [];
+  const siteOutward = siteName
+    ? outwardEntries.filter((e) => e.site === siteName || e.project === siteName)
+    : outwardEntries;
 
-  const sitePhotos = siteName
-    ? photos.filter((p) => p.site === siteName)
-    : [];
-
-  const pendingIndentsCount = myRequests.filter((r) => r.status === 'Pending').length;
-  const expectedDeliveriesCount = siteDeliveries.filter((d) => d.status === 'In Transit' || d.status === 'Expected').length;
+  const siteLabour = siteName
+    ? labourEntries.filter((e) => e.site === siteName || e.project === siteName)
+    : labourEntries;
 
   return (
     <div className="space-y-6">
@@ -92,7 +135,16 @@ export const SupervisorDashboard: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
+          <Button
+            variant="brand"
+            size="sm"
+            onClick={() => setShowRequestModal(true)}
+            leftIcon={<Send className="w-3.5 h-3.5" />}
+          >
+            Send Word / Request to Admin
+          </Button>
+
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold shadow-2xs">
             <HardHat className="w-3.5 h-3.5 text-amber-600" />
             <span>Supervisor Portal</span>
@@ -198,9 +250,9 @@ export const SupervisorDashboard: React.FC = () => {
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Action 1: Stock In */}
+          {/* Action 1: Material Inward */}
           <Link
-            to="/stock-in"
+            to="/material-inward"
             className="group p-5 bg-white rounded-2xl border border-slate-200 shadow-xs hover:border-[#0D5C3A] hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between mb-4">
@@ -208,26 +260,26 @@ export const SupervisorDashboard: React.FC = () => {
                 <ArrowDownToLine className="w-6 h-6" />
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-                Inbound
+                Inward
               </span>
             </div>
             <div>
               <h4 className="text-base font-extrabold text-slate-900 group-hover:text-[#0D5C3A] transition-colors">
-                Record Stock In
+                Material Inward
               </h4>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Log arriving cement, steel & delivery challans with invoice photos
+                Log arriving cement, steel & vendor shipments with auto-unit cost
               </p>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-[#0D5C3A]">
-              <span>Receive Material</span>
+              <span>Record Inward</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </div>
           </Link>
 
-          {/* Action 2: Stock Out */}
+          {/* Action 2: Material Outward */}
           <Link
-            to="/stock-out"
+            to="/material-outward"
             className="group p-5 bg-white rounded-2xl border border-slate-200 shadow-xs hover:border-amber-500 hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between mb-4">
@@ -235,73 +287,73 @@ export const SupervisorDashboard: React.FC = () => {
                 <ArrowUpFromLine className="w-6 h-6" />
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
-                Disbursement
+                Outward
               </span>
             </div>
             <div>
               <h4 className="text-base font-extrabold text-slate-900 group-hover:text-amber-600 transition-colors">
-                Record Stock Out
+                Material Outward
               </h4>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Issue materials to contractors, column casting, or masonry stages
+                Disburse materials by project, site, and specific nature of work
               </p>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-amber-700">
-              <span>Issue to Site Work</span>
+              <span>Issue Material</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </div>
           </Link>
 
-          {/* Action 3: Photo Monitoring */}
+          {/* Action 3: Labour Entry */}
           <Link
-            to="/photo-monitoring"
+            to="/labour-entry"
             className="group p-5 bg-white rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-500 hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Camera className="w-6 h-6" />
+                <HardHat className="w-6 h-6" />
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
-                Milestones
+                Labour
               </span>
             </div>
             <div>
               <h4 className="text-base font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                Upload Progress Photo
+                Labour Entry
               </h4>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Document daily construction progress, slab casting & site conditions
+                Log on-site daily worker headcounts and labour task assignments
               </p>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-indigo-700">
-              <span>Capture & Upload</span>
+              <span>Record Labour</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </div>
           </Link>
 
-          {/* Action 4: Material Indents */}
+          {/* Action 4: Stock Balance Tracking */}
           <Link
-            to="/material-requests"
+            to="/inventory"
             className="group p-5 bg-white rounded-2xl border border-slate-200 shadow-xs hover:border-blue-500 hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <FileSpreadsheet className="w-6 h-6" />
+                <Package className="w-6 h-6" />
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
-                Indent
+                Stock
               </span>
             </div>
             <div>
               <h4 className="text-base font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">
-                Raise Material Indent
+                Stock Balance Tracking
               </h4>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Request new cement, TMT rods, or sand allocations from Head Office
+                Real-time stock balance calculated as Inward minus Outward
               </p>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-blue-700">
-              <span>Create Indent</span>
+              <span>View Balance</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </div>
           </Link>
@@ -336,21 +388,21 @@ export const SupervisorDashboard: React.FC = () => {
 
         <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Truck className="w-5 h-5" />
+            <ArrowDownToLine className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Today's Deliveries</span>
-            <span className="text-xl font-extrabold text-slate-900">{expectedDeliveriesCount} Expected</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Inward Logs</span>
+            <span className="text-xl font-extrabold text-slate-900">{siteInward.length} Entries</span>
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5" />
+            <HardHat className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">My Indent Status</span>
-            <span className="text-xl font-extrabold text-amber-700">{pendingIndentsCount} Pending</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Labour Logs</span>
+            <span className="text-xl font-extrabold text-amber-700">{siteLabour.length} Entries</span>
           </div>
         </div>
       </div>
@@ -383,8 +435,8 @@ export const SupervisorDashboard: React.FC = () => {
                     icon={<Package className="w-8 h-8 text-slate-400" />}
                     title="No Materials Recorded for this Site"
                     description="Receive delivery trucks or register material quantities to track stock levels at this project site."
-                    actionLabel="+ Record Stock In"
-                    onAction={() => navigate('/stock-in')}
+                    actionLabel="+ Record Material Inward"
+                    onAction={() => navigate('/material-inward')}
                   />
                 </div>
               ) : (
@@ -419,9 +471,9 @@ export const SupervisorDashboard: React.FC = () => {
                       </div>
 
                       <Link
-                        to="/stock-in"
+                        to="/material-inward"
                         className="p-1.5 rounded-lg border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-[#0D5C3A] transition-colors"
-                        title="Stock In"
+                        title="Record Inward"
                       >
                         <Plus className="w-4 h-4" />
                       </Link>
@@ -432,16 +484,16 @@ export const SupervisorDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* My Material Indents / Requisitions */}
+          {/* Site Material Requests to Admin */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#0D5C3A] flex items-center justify-center">
                   <FileSpreadsheet className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">My Material Requisitions (Indents)</h3>
-                  <p className="text-[11px] text-slate-500">Status of requests submitted to Head Office for approval</p>
+                  <h3 className="text-sm font-bold text-slate-900">Site Material Requests to Admin</h3>
+                  <p className="text-[11px] text-slate-500">Material indents and requisitions raised for {siteName}</p>
                 </div>
               </div>
               <Button
@@ -450,45 +502,57 @@ export const SupervisorDashboard: React.FC = () => {
                 onClick={() => navigate('/material-requests')}
                 leftIcon={<Plus className="w-3.5 h-3.5" />}
               >
-                New Indent
+                Request Materials
               </Button>
             </div>
 
             <div className="divide-y divide-slate-100 text-xs">
-              {myRequests.length === 0 ? (
+              {siteRequests.length === 0 ? (
                 <div className="p-6 text-center text-slate-400">
-                  <p className="font-semibold text-slate-700">No Indent Requests Submitted</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Submit indents whenever site inventory drops below threshold.</p>
+                  <p className="font-semibold text-slate-700">No Material Requests Raised Yet</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Need additional supplies or materials on-site? Submit a request to central admin.</p>
                 </div>
               ) : (
-                myRequests.slice(0, 4).map((r) => (
-                  <div key={r.id} className="p-3.5 flex items-center justify-between gap-3">
+                siteRequests.slice(0, 4).map((req) => (
+                  <div key={req.id || req.requestId} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/60 transition-colors">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-900">{r.requestId}</span>
-                        <span className={`px-2 py-0.2 rounded-full text-[10px] font-bold ${
-                          r.status === 'Approved'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : r.status === 'Pending'
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-rose-50 text-rose-700'
-                        }`}>
-                          {r.status}
+                        <span className="font-semibold text-slate-900">{req.material}</span>
+                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-[#0D5C3A] border border-emerald-200">
+                          {req.site}
                         </span>
                       </div>
                       <p className="text-slate-800 font-semibold mt-1">
-                        {r.quantity} {r.unit} of {r.material}
+                        {req.quantity} {req.unit}
                       </p>
-                      <p className="text-[11px] text-slate-400">Required: {r.requiredDate || 'Urgent'}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {req.purpose ? `Purpose: ${req.purpose}` : `Urgency: ${req.urgency || 'Normal'}`} • Need: {req.requiredDate || 'Immediate'}
+                      </p>
                     </div>
 
-                    <div className="text-right text-[11px] text-slate-500">
-                      {r.status === 'Approved' ? (
-                        <span className="text-emerald-700 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Dispatched
-                        </span>
-                      ) : (
-                        <span className="text-amber-600 font-medium">Under Review</span>
+                    <div className="text-right">
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                          req.status === 'Approved'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : req.status === 'Rejected'
+                            ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                        }`}
+                      >
+                        {req.status === 'Approved' ? (
+                          <Truck className="w-3 h-3 text-emerald-600" />
+                        ) : req.status === 'Rejected' ? (
+                          <X className="w-3 h-3 text-rose-600" />
+                        ) : (
+                          <Clock className="w-3 h-3 text-amber-600" />
+                        )}
+                        <span>{req.status === 'Approved' ? 'Materials Sent' : req.status}</span>
+                      </span>
+                      {req.status === 'Approved' && (
+                        <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                          {req.dispatchedQty || req.quantity} {req.unit} in site stock
+                        </p>
                       )}
                     </div>
                   </div>
@@ -498,95 +562,147 @@ export const SupervisorDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column (5 cols): Today's Gate Deliveries & Progress Photo Reel */}
+        {/* Right Column (5 cols): Inbound Entries & Labour Logs */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Today's Inbound Consignments / Gate Deliveries */}
+          {/* Admin Instructions & Delivery Notices Card */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <Truck className="w-4 h-4 text-[#0D5C3A]" />
-                <h3 className="text-sm font-bold text-slate-900">Arriving Consignments</h3>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#0D5C3A] flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Admin Instructions & Notices</h3>
+                  <p className="text-[11px] text-slate-500">Live delivery alerts and instructions from central admin</p>
+                </div>
               </div>
-              <Link to="/deliveries" className="text-xs font-bold text-[#0D5C3A] hover:underline">
-                Gate Log
-              </Link>
+              <button
+                type="button"
+                onClick={() => setShowRequestModal(true)}
+                className="px-2.5 py-1 text-xs font-bold text-[#0D5C3A] bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                <Send className="w-3 h-3" />
+                <span>Send Word</span>
+              </button>
             </div>
 
-            <div className="divide-y divide-slate-100 text-xs">
-              {siteDeliveries.length === 0 ? (
+            <div className="divide-y divide-slate-100 text-xs max-h-72 overflow-y-auto">
+              {adminNotices.length === 0 ? (
                 <div className="p-6 text-center text-slate-400">
-                  <Truck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-600 font-semibold">No Consignments in Transit</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Dispatched material trucks will display here for site verification.</p>
+                  <p className="font-semibold text-slate-600">No New Admin Notices</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Instructions and consignment dispatches from Admin will appear here.</p>
                 </div>
               ) : (
-                siteDeliveries.slice(0, 4).map((d) => (
-                  <div key={d.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-900">{d.deliveryId}</span>
-                        <span className={`px-2 py-0.2 rounded-full text-[10px] font-bold ${
-                          d.status === 'Received' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-                        }`}>
-                          {d.status}
-                        </span>
+                adminNotices.slice(0, 5).map((notice) => (
+                  <div key={notice.id} className="p-3.5 hover:bg-slate-50/60 transition-colors flex items-start justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <span className="font-bold text-slate-900 text-xs block">{notice.text}</span>
+                      {notice.subtext && <p className="text-[11px] text-slate-600">{notice.subtext}</p>}
+                      {notice.words && (
+                        <p className="text-[11px] text-slate-700 italic bg-amber-50/70 p-1.5 rounded-md border border-amber-100 mt-1">
+                          "{notice.words}"
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 pt-1 text-[10px] text-slate-400">
+                        <span className="font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100">{notice.site}</span>
+                        <span>&bull; From Admin</span>
                       </div>
-                      <p className="font-bold text-slate-800 mt-0.5">
-                        {d.supplier} &bull; {d.material}
-                      </p>
-                      <p className="text-[11px] text-slate-500">Qty: {d.receivedQty || d.expectedQty} {d.unit}</p>
                     </div>
-
-                    <Link
-                      to="/stock-in"
-                      className="px-2.5 py-1 bg-[#0D5C3A] hover:bg-[#094228] text-white rounded text-[11px] font-bold transition-colors shrink-0 shadow-2xs"
-                    >
-                      Verify
-                    </Link>
+                    <span className="text-[10px] text-slate-400 shrink-0 mt-0.5">{notice.time}</span>
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          {/* Recent Site Progress Photos Reel */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Camera className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900">Recent Progress Photos</h3>
+          {/* Material Inward Logs */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <ArrowDownToLine className="w-4 h-4 text-[#0D5C3A]" />
+                <h3 className="text-sm font-bold text-slate-900">Recent Material Inward</h3>
               </div>
-              <Link to="/photo-monitoring" className="text-xs font-bold text-[#0D5C3A] hover:underline">
-                Upload New
+              <Link to="/material-inward" className="text-xs font-bold text-[#0D5C3A] hover:underline">
+                View All
               </Link>
             </div>
 
-            {sitePhotos.length === 0 ? (
+            <div className="divide-y divide-slate-100 text-xs">
+              {siteInward.length === 0 ? (
+                <div className="p-6 text-center text-slate-400">
+                  <ArrowDownToLine className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-slate-600 font-semibold">No Inward Deliveries Recorded</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Arriving materials will display here.</p>
+                </div>
+              ) : (
+                siteInward.slice(0, 4).map((inEntry) => (
+                  <div key={inEntry.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-900">{inEntry.entryCode}</span>
+                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">
+                          {inEntry.category}
+                        </span>
+                      </div>
+                      <p className="font-bold text-slate-800 mt-0.5">
+                        {inEntry.quantity} {inEntry.measurement} &bull; {inEntry.material}
+                      </p>
+                      <p className="text-[11px] text-slate-500">Date: {inEntry.date}</p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="font-bold text-slate-800 block text-xs">
+                        ₹{inEntry.totalValue ? inEntry.totalValue.toLocaleString('en-IN') : '0'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Daily Labour Entries Log */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <HardHat className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">Today's Labour Workforce</h3>
+              </div>
+              <Link to="/labour-entry" className="text-xs font-bold text-[#0D5C3A] hover:underline">
+                Record New
+              </Link>
+            </div>
+
+            {siteLabour.length === 0 ? (
               <div className="p-6 border border-dashed border-slate-200 rounded-xl text-center space-y-2">
-                <Camera className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-xs font-semibold text-slate-700">No Photos Uploaded for this Site</p>
-                <p className="text-[11px] text-slate-400">Take site progress photos to verify work milestones.</p>
+                <HardHat className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-semibold text-slate-700">No Labour Entries Recorded Today</p>
+                <p className="text-[11px] text-slate-400">Log on-site worker counts to track daily site workforce.</p>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => navigate('/photo-monitoring')}
+                  onClick={() => navigate('/labour-entry')}
                   className="mt-2"
                 >
-                  Upload Site Photo
+                  + Add Labour Entry
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5">
-                {sitePhotos.slice(0, 4).map((p) => (
-                  <div key={p.id} className="rounded-xl overflow-hidden border border-slate-200 aspect-4/3 relative group shadow-2xs">
-                    <img
-                      src={p.imageUrl}
-                      alt={p.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-2.5 text-white">
-                      <span className="text-[11px] font-bold truncate">{p.title}</span>
-                      <span className="text-[9px] text-slate-300">{p.timestamp}</span>
+              <div className="space-y-2.5">
+                {siteLabour.slice(0, 4).map((lab) => (
+                  <div key={lab.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800">{lab.natureOfWork}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700">
+                          {lab.type}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Project: {lab.project} &bull; Site: {lab.site}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-extrabold text-slate-900 block">{lab.workerCount}</span>
+                      <span className="text-[10px] text-slate-400">Workers</span>
                     </div>
                   </div>
                 ))}
@@ -595,6 +711,105 @@ export const SupervisorDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+      {/* Send Word / Request to Admin Modal */}
+      {showRequestModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <Send className="w-5 h-5 text-[#0D5C3A]" />
+                <h3 className="text-base font-bold text-slate-900">Send Request / Word to Admin</h3>
+              </div>
+              <button
+                onClick={() => setShowRequestModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendSupervisorRequest} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Current Active Site</label>
+                <div className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 font-bold text-slate-800">
+                  {siteName || 'Assigned Project Site'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Request Category</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRequestCategory('material')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold text-center border transition-all ${
+                      requestCategory === 'material'
+                        ? 'bg-emerald-50 border-[#0D5C3A] text-[#0D5C3A]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    📦 Material Indent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRequestCategory('work')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold text-center border transition-all ${
+                      requestCategory === 'work'
+                        ? 'bg-emerald-50 border-[#0D5C3A] text-[#0D5C3A]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    🏗️ Site Status
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRequestCategory('words')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold text-center border transition-all ${
+                      requestCategory === 'words'
+                        ? 'bg-emerald-50 border-[#0D5C3A] text-[#0D5C3A]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    💬 Message/Word
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Request Details / Message *</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. Urgent requirement of 150 bags OPC cement and 2 tonnes 12mm rebar for slab casting on Friday."
+                  value={requestText}
+                  onChange={(e) => setRequestText(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowRequestModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="brand"
+                  size="sm"
+                  disabled={requestSubmitting || !requestText.trim()}
+                  leftIcon={<Send className="w-3.5 h-3.5" />}
+                >
+                  {requestSubmitting ? 'Sending...' : 'Send to Admin'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

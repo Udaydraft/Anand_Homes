@@ -23,7 +23,7 @@ class UserRegisterRequest(UserBase):
 
 
 class UserLoginRequest(BaseModel):
-    email: EmailStr = Field(..., examples=["jane.doe@example.com"])
+    email: str = Field(..., examples=["admin@anandhomes.com", "supervisor1"])
     password: str = Field(..., min_length=1)
 
 
@@ -37,6 +37,9 @@ class UserResponse(UserBase):
     is_active: bool = True
     created_at: datetime
     updated_at: datetime
+    login_id: Optional[str] = None
+    assigned_site: Optional[str] = None
+    assigned_project: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,6 +54,16 @@ class TokenResponse(BaseModel):
 class AuthResponseData(BaseModel):
     user: UserResponse
     tokens: TokenResponse
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., description="Login ID or Email Address", examples=["karthik.raja", "karthik.raja@anandhomes.com"])
+    new_password: str = Field(..., min_length=6, description="New Password (minimum 6 characters)")
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6)
 
 
 class UserProfileUpdateRequest(BaseModel):

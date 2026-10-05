@@ -28,6 +28,11 @@ export const authService = {
     return data;
   },
 
+  async forgotPassword(payload: { email: string; new_password: string }): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.post<ApiResponse<{ success: boolean; message: string }>>('/auth/forgot-password', payload);
+    return res.data.data;
+  },
+
   async refreshToken(refreshToken: string): Promise<AuthTokens> {
     const res = await apiClient.post<ApiResponse<AuthTokens>>('/auth/refresh', {
       refresh_token: refreshToken,

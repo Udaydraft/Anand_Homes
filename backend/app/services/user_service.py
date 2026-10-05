@@ -30,9 +30,17 @@ class UserService:
             return None
         return UserModel.from_mongo(doc)
 
-    async def get_by_email(self, email: str) -> Optional[UserModel]:
-        """Fetch a single user document by email (case-insensitive)."""
-        doc = await self.collection.find_one({"email": email.lower().strip()})
+    async def get_by_email(self, identifier: str) -> Optional[UserModel]:
+        """Fetch a single user document by email or login_id/username (case-insensitive)."""
+        id_clean = identifier.lower().strip()
+        doc = await self.collection.find_one({
+            "$or": [
+                {"email": id_clean},
+                {"login_id": id_clean},
+                {"username": id_clean},
+                {"email": f"{id_clean}@anandhomes.com"},
+            ]
+        })
         if not doc:
             return None
         return UserModel.from_mongo(doc)
@@ -114,4 +122,7 @@ class UserService:
             is_active=user.is_active,
             created_at=user.created_at,
             updated_at=user.updated_at,
+            login_id=getattr(user, "login_id", None),
+            assigned_site=getattr(user, "assigned_site", None),
+            assigned_project=getattr(user, "assigned_project", None),
         )

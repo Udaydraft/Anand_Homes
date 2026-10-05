@@ -26,18 +26,18 @@ export const MoreMenuScreen: React.FC<Props> = ({ navigation }) => {
     icon: any;
   }[] = [
     { label: 'Dashboard', screen: 'Dashboard', icon: 'home-outline' },
-    roleMode === 'admin'
-      ? { label: 'Sites / Projects', screen: 'Sites', icon: 'business-outline' }
-      : { label: 'My Site', screen: 'MySite', icon: 'business-outline' },
-    { label: 'Inventory', screen: 'Inventory', icon: 'cube-outline' },
-    { label: 'Stock In', screen: 'StockIn', icon: 'arrow-down-circle-outline' },
-    { label: 'Stock Out', screen: 'StockOut', icon: 'arrow-up-circle-outline' },
-    { label: 'Material Requests', screen: 'MaterialRequests', icon: 'document-text-outline' },
-    { label: 'Deliveries', screen: 'Deliveries', icon: 'car-outline' },
-    { label: 'Photo Monitoring', screen: 'PhotoMonitoring', icon: 'camera-outline' },
+    { label: '2. Project Master', screen: 'ProjectMaster', icon: 'business-outline' },
+    { label: '3. Supervisor Master', screen: 'SupervisorMaster', icon: 'people-outline' },
+    { label: '4. Project Duration', screen: 'ProjectDuration', icon: 'calendar-outline' },
+    { label: '5. Inventory Master', screen: 'InventoryMaster', icon: 'cube-outline' },
+    { label: '6. Inward Material', screen: 'MaterialInward', icon: 'arrow-down-circle-outline' },
+    { label: '7. Outward Material', screen: 'MaterialOutward', icon: 'arrow-up-circle-outline' },
+    { label: '8. Labour Entry', screen: 'LabourEntry', icon: 'construct-outline' },
+    { label: 'Stock Balance Tracking', screen: 'Inventory', icon: 'layers-outline' },
     { label: 'Low Stock Alerts', screen: 'LowStockAlert', icon: 'alert-circle-outline' },
-    { label: 'Interactive Map View', screen: 'SiteMapView', icon: 'map-outline' },
     { label: 'Reports & Analytics', screen: 'Reports', icon: 'pie-chart-outline' },
+    { label: 'Privacy Policy', screen: 'PrivacyPolicy', icon: 'shield-checkmark-outline' },
+    { label: 'Terms & Conditions', screen: 'TermsConditions', icon: 'document-text-outline' },
   ];
 
   return (

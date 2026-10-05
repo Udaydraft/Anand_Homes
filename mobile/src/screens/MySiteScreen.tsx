@@ -118,10 +118,10 @@ export const MySiteScreen: React.FC<Props> = ({ navigation }) => {
 
           <TouchableOpacity
             style={styles.uploadPhotoBtn}
-            onPress={() => navigation.navigate('PhotoMonitoring')}
+            onPress={() => navigation.navigate('MaterialOutward')}
           >
-            <Ionicons name="camera-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.uploadPhotoText}>Upload Site Photo</Text>
+            <Ionicons name="arrow-up-circle-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.uploadPhotoText}>Issue Outward Material</Text>
           </TouchableOpacity>
         </View>
 

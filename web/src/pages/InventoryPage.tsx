@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardContext } from '../context/DashboardContext';
 import { Button } from '../components/Button';
@@ -29,10 +29,15 @@ export const InventoryPage: React.FC = () => {
     sitesList,
     globalSearch,
     isLoadingData,
+    refreshData,
     addInventoryItem,
     updateInventoryItem,
     deleteInventoryItem,
   } = useDashboardContext();
+
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedSiteFilter, setSelectedSiteFilter] = useState('All');
@@ -61,7 +66,8 @@ export const InventoryPage: React.FC = () => {
   const query = searchTerm || globalSearch;
   const filteredItems = inventory.filter((item) => {
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
-    const matchesSite = selectedSiteFilter === 'All' || item.site === selectedSiteFilter;
+    const matchesSite =
+      selectedSiteFilter === 'All' || selectedSiteFilter === 'All Sites' || item.site === selectedSiteFilter;
     const matchesSearch =
       item.name.toLowerCase().includes(query.toLowerCase()) ||
       item.category.toLowerCase().includes(query.toLowerCase()) ||
@@ -157,8 +163,8 @@ export const InventoryPage: React.FC = () => {
       {/* Top Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Inventory</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Real-time stock levels, minimum thresholds, and site allocations</p>
+          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Stock Balance Tracking</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Master material catalog, real-time stock levels, minimum thresholds, and site allocations</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -218,7 +224,6 @@ export const InventoryPage: React.FC = () => {
                 onChange={(e) => setSelectedSiteFilter(e.target.value)}
                 className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 outline-none focus:border-[#0D5C3A]"
               >
-                <option value="All">All Sites</option>
                 {sitesList.map((s) => (
                   <option key={s} value={s}>
                     {s}

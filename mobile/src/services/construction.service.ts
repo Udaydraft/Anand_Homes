@@ -8,6 +8,13 @@ import {
   SitePhoto,
   LowStockAlertItem,
   ActivityItem,
+  ProjectMaster,
+  SupervisorMaster,
+  ProjectDuration,
+  InventoryMasterItem,
+  InwardMaterialEntry,
+  OutwardMaterialEntry,
+  LabourEntry,
 } from '@project/shared';
 
 export interface DashboardSummary {
@@ -56,7 +63,7 @@ export const constructionService = {
   },
 
   async getLowStock(site?: string): Promise<LowStockAlertItem[]> {
-    const params = site && site !== 'All Sites' ? { site } : {};
+    const params = site && site !== 'All Sites' ? { site } : { all_projects: true };
     const res = await apiClient.get<ApiResponse<LowStockAlertItem[]>>('/inventory/low-stock', { params });
     return res.data.data;
   },
@@ -185,5 +192,154 @@ export const constructionService = {
       },
     });
     return res.data.data.url;
+  },
+
+  // -------------------------------------------------------------------------
+  // Key Screens: 1 & 2. Project Master
+  // -------------------------------------------------------------------------
+  async getProjectsMaster(): Promise<ProjectMaster[]> {
+    const res = await apiClient.get<ApiResponse<ProjectMaster[]>>('/projects');
+    return res.data.data;
+  },
+
+  async createProjectMaster(data: { projectName: string; siteName: string; status?: string }): Promise<ProjectMaster> {
+    const res = await apiClient.post<ApiResponse<ProjectMaster>>('/projects', data);
+    return res.data.data;
+  },
+
+  async deleteProjectMaster(id: string): Promise<void> {
+    await apiClient.delete<ApiResponse<any>>(`/projects/${id}`);
+  },
+
+  // -------------------------------------------------------------------------
+  // Key Screens: 3. Supervisor Master
+  // -------------------------------------------------------------------------
+  async getSupervisorsMaster(): Promise<SupervisorMaster[]> {
+    const res = await apiClient.get<ApiResponse<SupervisorMaster[]>>('/supervisors');
+    return res.data.data;
+  },
+
+  async createSupervisorMaster(data: {
+    name: string;
+    loginId: string;
+    password?: string;
+    project: string;
+    site: string;
+  }): Promise<SupervisorMaster> {
+    const res = await apiClient.post<ApiResponse<SupervisorMaster>>('/supervisors', data);
+    return res.data.data;
+  },
+
+  async deleteSupervisorMaster(id: string): Promise<void> {
+    await apiClient.delete<ApiResponse<any>>(`/supervisors/${id}`);
+  },
+
+  // -------------------------------------------------------------------------
+  // Key Screens: 4. Project Duration
+  // -------------------------------------------------------------------------
+  async getProjectDurations(): Promise<ProjectDuration[]> {
+    const res = await apiClient.get<ApiResponse<ProjectDuration[]>>('/project-durations');
+    return res.data.data;
+  },
+
+  async createProjectDuration(data: {
+    projectName: string;
+    siteName: string;
+    fromDate: string;
+    toDate: string;
+  }): Promise<ProjectDuration> {
+    const res = await apiClient.post<ApiResponse<ProjectDuration>>('/project-durations', data);
+    return res.data.data;
+  },
+
+  async deleteProjectDuration(id: string): Promise<void> {
+    await apiClient.delete<ApiResponse<any>>(`/project-durations/${id}`);
+  },
+
+  // -------------------------------------------------------------------------
+  // Key Screens: 5. Inventory Master
+  // -------------------------------------------------------------------------
+  async getInventoryMaster(): Promise<InventoryMasterItem[]> {
+    const res = await apiClient.get<ApiResponse<InventoryMasterItem[]>>('/inventory-master');
+    return res.data.data;
+  },
+
+  async createInventoryMaster(data: {
+    category: string;
+    material: string;
+    measurement: string;
+    materialType?: 'Prime' | 'Other';
+    natureOfWork?: string[];
+  }): Promise<InventoryMasterItem> {
+    const res = await apiClient.post<ApiResponse<InventoryMasterItem>>('/inventory-master', data);
+    return res.data.data;
+  },
+
+  async deleteInventoryMaster(id: string): Promise<void> {
+    await apiClient.delete<ApiResponse<any>>(`/inventory-master/${id}`);
+  },
+
+  // -------------------------------------------------------------------------
+  // Key Screens: 6. Inward Material Entry
+  // -------------------------------------------------------------------------
+  async getMaterialInward(): Promise<InwardMaterialEntry[]> {
+    const res = await apiClient.get<ApiResponse<InwardMaterialEntry[]>>('/material-inward');
+    return res.data.data;
+  },
+
+  async createMaterialInward(data: {
+    date: string;
+    category: string;
+    material: string;
+    quantity: number;
+    measurement: string;
+    totalValue?: number;
+  }): Promise<InwardMaterialEntry> {
+    const res = await apiClient.post<ApiResponse<InwardMaterialEntry>>('/material-inward', data);
+    return res.data.data;
+  },
+
+  // -------------------------------------------------------------------------
+  // Key Screens: 7. Outward Material Entry
+  // -------------------------------------------------------------------------
+  async getMaterialOutward(): Promise<OutwardMaterialEntry[]> {
+    const res = await apiClient.get<ApiResponse<OutwardMaterialEntry[]>>('/material-outward');
+    return res.data.data;
+  },
+
+  async createMaterialOutward(data: {
+    date: string;
+    project: string;
+    site: string;
+    natureOfWork: string;
+    quantity: number;
+    measurement: string;
+  }): Promise<OutwardMaterialEntry> {
+    const res = await apiClient.post<ApiResponse<OutwardMaterialEntry>>('/material-outward', data);
+    return res.data.data;
+  },
+
+  // -------------------------------------------------------------------------
+  // Key Screens: 8. Labour Entry
+  // -------------------------------------------------------------------------
+  async getLabourEntries(): Promise<LabourEntry[]> {
+    const res = await apiClient.get<ApiResponse<LabourEntry[]>>('/labour-entries');
+    return res.data.data;
+  },
+
+  async createLabourEntry(data: {
+    date: string;
+    project: string;
+    site: string;
+    natureOfWork: string;
+    type: 'Count (Labour)' | 'Other';
+    workerCount: number;
+  }): Promise<LabourEntry> {
+    const res = await apiClient.post<ApiResponse<LabourEntry>>('/labour-entries', data);
+    return res.data.data;
+  },
+
+  async deleteLabourEntry(id: string): Promise<void> {
+    await apiClient.delete<ApiResponse<any>>(`/labour-entries/${id}`);
   },
 };

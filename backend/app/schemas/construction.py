@@ -7,10 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field
 # Site Schemas
 # ---------------------------------------------------------------------------
 class SiteBase(BaseModel):
-    code: str = Field(..., examples=["RBL-S-001"])
+    code: Optional[str] = "SITE-001"
     name: str = Field(..., examples=["Site Alpha"])
-    location: str = Field(..., examples=["Chennai, TN"])
-    supervisor: str = Field(..., examples=["Rajesh Kumar"])
+    location: Optional[str] = "On-site"
+    supervisor: Optional[str] = "Unassigned"
     supervisorId: Optional[str] = None
     supervisorEmail: Optional[str] = None
     adminId: Optional[str] = None
@@ -60,7 +60,7 @@ class SiteResponse(SiteBase):
 # Inventory Schemas
 # ---------------------------------------------------------------------------
 StockStatusType = Literal["Good", "Medium", "Low", "Out of Stock"]
-CategoryType = Literal["Cement", "Steel", "Aggregate", "Masonry", "Finishing", "Others"]
+CategoryType = str
 
 
 class InventoryItemBase(BaseModel):
@@ -71,6 +71,7 @@ class InventoryItemBase(BaseModel):
     minStock: float = 0.0
     status: StockStatusType = "Good"
     site: str = Field(..., examples=["Site Alpha"])
+    unitPrice: Optional[float] = Field(0.0, examples=[350.0])
 
 
 class InventoryItemCreate(InventoryItemBase):
@@ -141,6 +142,7 @@ class MaterialRequestCreate(BaseModel):
     material: str
     quantity: float
     unit: str
+    urgency: Optional[str] = "Normal"
     requestedBy: str = "Site Supervisor"
     requiredDate: Optional[str] = None
     purpose: Optional[str] = None
@@ -152,6 +154,16 @@ class RequestStatusUpdate(BaseModel):
     status: RequestStatus
 
 
+class SendMaterialsRequest(BaseModel):
+    quantity: Optional[float] = None
+    notes: Optional[str] = None
+    supplierOrStore: Optional[str] = "Central Warehouse / Admin"
+    addStockQuantity: Optional[float] = None
+    supplier: Optional[str] = None
+    invoiceNo: Optional[str] = None
+    unitPrice: Optional[float] = None
+
+
 class MaterialRequestResponse(BaseModel):
     id: str
     requestId: str
@@ -159,6 +171,7 @@ class MaterialRequestResponse(BaseModel):
     material: str
     quantity: float
     unit: str
+    urgency: Optional[str] = "Normal"
     requestedBy: str
     requestedOn: str
     requiredDate: Optional[str] = None
@@ -166,6 +179,10 @@ class MaterialRequestResponse(BaseModel):
     status: RequestStatus
     notes: Optional[str] = None
     attachments: Optional[str] = None
+    dispatchedQty: Optional[float] = None
+    dispatchedOn: Optional[str] = None
+    dispatchedBy: Optional[str] = None
+    dispatchNotes: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -261,9 +278,23 @@ class ActivityResponse(BaseModel):
     subtext: Optional[str] = None
     site: str
     time: str
-    type: Literal["stock_in", "stock_out", "request", "delivery", "photo"]
+    type: str = "request"
+    actor: Optional[str] = None
+    targetRole: Optional[str] = None
+    words: Optional[str] = None
+    status: Optional[str] = "unread"
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class ActivityCreate(BaseModel):
+    text: str
+    site: str
+    type: Optional[str] = "request"
+    subtext: Optional[str] = None
+    actor: Optional[str] = None
+    targetRole: Optional[str] = None
+    words: Optional[str] = None
 
 
 class DashboardSummaryResponse(BaseModel):
@@ -276,3 +307,189 @@ class DashboardSummaryResponse(BaseModel):
     activeDeliveriesCount: int
     lowStockCount: int
     criticalAlertsCount: int
+
+
+# ---------------------------------------------------------------------------
+# Key Screens Schemas (Project Master, Supervisor Master, Project Duration, etc.)
+# ---------------------------------------------------------------------------
+
+class ProjectMasterCreate(BaseModel):
+    projectName: str = Field(..., examples=["Metro Building"])
+    siteName: str = Field(..., examples=["Site A"])
+    status: Optional[str] = "Active"
+
+
+class ProjectMasterUpdate(BaseModel):
+    projectName: Optional[str] = None
+    siteName: Optional[str] = None
+    status: Optional[str] = None
+
+
+class ProjectMasterResponse(BaseModel):
+    id: str
+    projectName: str
+    siteName: str
+    createdOn: str
+    status: str = "Active"
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class SupervisorMasterCreate(BaseModel):
+    name: str = Field(..., examples=["Ramesh Kumar"])
+    loginId: str = Field(..., examples=["ramesh"])
+    password: str = Field(..., examples=["password123"])
+    project: str = Field(..., examples=["Metro Building"])
+    site: str = Field(..., examples=["Site A"])
+
+
+class SupervisorMasterUpdate(BaseModel):
+    name: Optional[str] = None
+    loginId: Optional[str] = None
+    password: Optional[str] = None
+    project: Optional[str] = None
+    site: Optional[str] = None
+
+
+class SupervisorMasterResponse(BaseModel):
+    id: str
+    name: str
+    loginId: str
+    project: str
+    site: str
+    createdOn: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class ProjectDurationCreate(BaseModel):
+    projectName: str = Field(..., examples=["Metro Building"])
+    siteName: str = Field(..., examples=["Site A"])
+    fromDate: str = Field(..., examples=["10-08-2025"])
+    toDate: str = Field(..., examples=["15-08-2026"])
+
+
+class ProjectDurationResponse(BaseModel):
+    id: str
+    projectName: str
+    siteName: str
+    fromDate: str
+    toDate: str
+    createdOn: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class InventoryMasterCreate(BaseModel):
+    category: str = Field(..., examples=["Cement"])
+    material: str = Field(..., examples=["UltraTech PPC"])
+    measurement: str = Field(..., examples=["Bags"])
+    materialType: Optional[Literal["Prime", "Other"]] = "Prime"
+    natureOfWork: Optional[List[str]] = ["Construction", "Installation"]
+    initialStock: Optional[float] = 0.0
+    minStock: Optional[float] = 10.0
+    site: Optional[str] = None
+
+
+class InventoryMasterUpdate(BaseModel):
+    category: Optional[str] = None
+    material: Optional[str] = None
+    measurement: Optional[str] = None
+    materialType: Optional[Literal["Prime", "Other"]] = None
+    natureOfWork: Optional[List[str]] = None
+    initialStock: Optional[float] = None
+    minStock: Optional[float] = None
+    site: Optional[str] = None
+
+
+class InventoryMasterResponse(BaseModel):
+    id: str
+    category: str
+    material: str
+    measurement: str
+    materialType: str = "Prime"
+    natureOfWork: List[str] = []
+    createdOn: Optional[str] = None
+    initialStock: Optional[float] = 0.0
+    minStock: Optional[float] = 10.0
+    site: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class InwardMaterialCreate(BaseModel):
+    date: str = Field(..., examples=["10-08-2025"])
+    site: Optional[str] = Field(None, examples=["Site A"])
+    project: Optional[str] = Field(None, examples=["ACB Building"])
+    category: str = Field(..., examples=["Cement"])
+    material: str = Field(..., examples=["UltraTech PPC"])
+    quantity: float = Field(..., gt=0, examples=[100.0])
+    measurement: str = Field(..., examples=["Bags"])
+    totalValue: Optional[float] = Field(0.0, examples=[35000.0])
+
+
+class InwardMaterialResponse(BaseModel):
+    id: str
+    entryCode: str
+    date: str
+    site: Optional[str] = None
+    project: Optional[str] = None
+    category: str
+    material: str
+    quantity: float
+    measurement: str
+    totalValue: float
+    unitPrice: float
+    createdOn: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class OutwardMaterialCreate(BaseModel):
+    date: str = Field(..., examples=["10-08-2025"])
+    project: str = Field(..., examples=["Metro Building"])
+    site: str = Field(..., examples=["Site A"])
+    material: Optional[str] = Field(None, examples=["UltraTech PPC"])
+    natureOfWork: str = Field(..., examples=["Construction"])
+    quantity: float = Field(..., gt=0, examples=[25.0])
+    measurement: str = Field(..., examples=["Bags"])
+    outwardId: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class OutwardMaterialResponse(BaseModel):
+    id: str
+    outwardId: Optional[str] = None
+    date: str
+    project: str
+    site: str
+    material: Optional[str] = None
+    natureOfWork: str
+    quantity: float
+    measurement: str
+    notes: Optional[str] = None
+    createdOn: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class LabourEntryCreate(BaseModel):
+    date: str = Field(..., examples=["10-08-2025"])
+    project: str = Field(..., examples=["Metro Building"])
+    site: str = Field(..., examples=["Site A"])
+    natureOfWork: str = Field(..., examples=["Construction"])
+    type: Literal["Count (Labour)", "Other"] = "Count (Labour)"
+    workerCount: int = Field(..., gt=0, examples=[15])
+
+
+class LabourEntryResponse(BaseModel):
+    id: str
+    date: str
+    project: str
+    site: str
+    natureOfWork: str
+    type: str
+    workerCount: int
+    createdOn: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)

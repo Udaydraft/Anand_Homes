@@ -1,446 +1,472 @@
-import React, { useState } from 'react';
-import { useDashboardContext } from '../context/DashboardContext';
+import React, { useState, useEffect } from 'react';
 import {
   FileSpreadsheet,
-  Search,
   Plus,
-  Eye,
+  Send,
+  RotateCcw,
   CheckCircle2,
   XCircle,
   Clock,
-  ChevronRight,
-  X,
   AlertCircle,
-  FileText,
+  Loader2,
+  Check,
+  X,
+  Building2,
+  Filter,
+  Truck,
+  PackageCheck,
+  ArrowRight,
+  ShieldCheck,
+  User,
+  Calendar,
+  Layers,
+  AlertTriangle,
 } from 'lucide-react';
-import { MaterialRequest } from '@project/shared';
-import { Button } from '../components/Button';
-import { EmptyState } from '../components/common/EmptyState';
-import { ConfirmationDialog } from '../components/feedback/ConfirmationDialog';
+import { constructionService } from '../services/construction.service';
+import { MaterialRequest, Site, InventoryMasterItem } from '@project/shared';
+import { useAuth } from '../hooks/useAuth';
+import { useDashboardContext } from '../context/DashboardContext';
+
+const URGENCY_OPTIONS = ['Normal', 'High', 'Urgent'];
+const MEASUREMENT_OPTIONS = ['Bags', 'Tons', 'Nos', 'Kg', 'Litres', 'Sq.Ft', 'Cum', 'Rft'];
 
 export const MaterialRequestsPage: React.FC = () => {
+  const { user } = useAuth();
   const {
-    roleMode,
-    materialRequests,
     sites,
     myAssignedSites,
-    createMaterialRequest,
-    approveRequest,
-    rejectRequest,
-    cancelRequest,
-    globalSearch,
+    selectedSite,
+    inventory,
+    roleMode,
+    isSupervisor: isSupervisorCtx,
+    refreshData,
   } = useDashboardContext();
 
-  const availableSites = roleMode === 'supervisor' ? myAssignedSites : sites;
+  const isSupervisor = isSupervisorCtx || roleMode === 'supervisor' || user?.role === 'supervisor';
+  const isAdmin = !isSupervisor;
 
-  const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('Pending');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRequest, setSelectedRequest] = useState<MaterialRequest | null>(null);
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [rejectRequestId, setRejectRequestId] = useState<string | null>(null);
-  const [cancelRequestId, setCancelRequestId] = useState<string | null>(null);
+  const [requests, setRequests] = useState<MaterialRequest[]>([]);
+  const [inventoryMaster, setInventoryMaster] = useState<InventoryMasterItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [filterSite, setFilterSite] = useState<string>('All Sites');
+  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [showAdminCreate, setShowAdminCreate] = useState(false);
 
-  // New Request Form State
-  const [newReq, setNewReq] = useState({
-    site: availableSites[0]?.name || '',
-    material: 'Cement',
-    quantity: '',
-    unit: 'Bags',
-    purpose: '',
-    requiredDate: new Date().toISOString().split('T')[0],
-    notes: '',
-  });
+  // Form states
+  const [site, setSite] = useState<string>('');
+  const [material, setMaterial] = useState<string>('');
+  const [category, setCategory] = useState<string>('Cement');
+  const [quantity, setQuantity] = useState<string>('');
+  const [unit, setUnit] = useState<string>('Bags');
+  const [urgency, setUrgency] = useState<string>('Normal');
+  const [requiredDate, setRequiredDate] = useState<string>(
+    new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0]
+  );
+  const [purpose, setPurpose] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [successText, setSuccessText] = useState<string | null>(null);
+  const [errorText, setErrorText] = useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (!newReq.site && availableSites.length > 0) {
-      setNewReq((prev) => ({ ...prev, site: availableSites[0].name }));
+  // Dispatch modal for Admin to accept & send materials to supervisor
+  const [dispatchModalReq, setDispatchModalReq] = useState<MaterialRequest | null>(null);
+  const [dispatchQty, setDispatchQty] = useState<string>('');
+  const [dispatchNotes, setDispatchNotes] = useState<string>('');
+  const [dispatchStore, setDispatchStore] = useState<string>('Central Warehouse / Admin Store');
+  const [dispatching, setDispatching] = useState(false);
+
+  // Restock / Add to stock before dispatch states
+  const [needAddStock, setNeedAddStock] = useState(false);
+  const [addStockQty, setAddStockQty] = useState('');
+  const [stockSupplier, setStockSupplier] = useState('');
+  const [stockInvoice, setStockInvoice] = useState('');
+  const [stockUnitPrice, setStockUnitPrice] = useState('');
+
+  const fetchRequestsData = async () => {
+    try {
+      setLoading(true);
+      const [reqData, masterData] = await Promise.all([
+        constructionService.getRequests(),
+        constructionService.getInventoryMaster(),
+      ]);
+      setRequests(reqData || []);
+      setInventoryMaster(masterData || []);
+
+      if (masterData && masterData.length > 0 && !material) {
+        setMaterial(masterData[0].material);
+        setCategory(masterData[0].category);
+        setUnit(masterData[0].measurement || 'Bags');
+      }
+    } catch (err: any) {
+      console.error('Failed to load material requests:', err);
+    } finally {
+      setLoading(false);
     }
-  }, [availableSites, newReq.site]);
-
-  const materials = ['Cement', 'Steel 12mm', 'Sand', 'Bricks', 'Paint', 'Gravel 20mm', 'Plywood', 'Rods 8mm'];
-  const units = ['Bags', 'Ton', 'Loads', 'Nos', 'Boxes', 'Sheets'];
-
-  const query = searchTerm || globalSearch;
-  const filteredRequests = materialRequests.filter((r) => {
-    const matchesTab = activeTab === 'All' || r.status === activeTab;
-    const matchesSearch =
-      r.requestId.toLowerCase().includes(query.toLowerCase()) ||
-      r.site.toLowerCase().includes(query.toLowerCase()) ||
-      r.material.toLowerCase().includes(query.toLowerCase()) ||
-      r.requestedBy.toLowerCase().includes(query.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
-
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newReq.site || !newReq.material || !newReq.quantity) return;
-    createMaterialRequest({
-      site: newReq.site,
-      material: newReq.material,
-      quantity: parseFloat(newReq.quantity) || 1,
-      unit: newReq.unit,
-      purpose: newReq.purpose.trim() || 'General Construction',
-      requiredDate: newReq.requiredDate,
-      notes: newReq.notes,
-    });
-    setNewReq({
-      site: availableSites[0]?.name || '',
-      material: 'Cement',
-      quantity: '',
-      unit: 'Bags',
-      purpose: '',
-      requiredDate: new Date().toISOString().split('T')[0],
-      notes: '',
-    });
-    setShowNewModal(false);
-    setActiveTab('Pending');
   };
 
+  useEffect(() => {
+    fetchRequestsData();
+  }, []);
+
+  const availableSites = isSupervisor && myAssignedSites.length > 0 ? myAssignedSites : sites;
+
+  useEffect(() => {
+    if (availableSites.length > 0 && !site) {
+      setSite(selectedSite && selectedSite !== 'All Sites' ? selectedSite : availableSites[0].name);
+    }
+  }, [availableSites, selectedSite]);
+
+  const handleMaterialSelect = (matName: string) => {
+    setMaterial(matName);
+    const matched = inventoryMaster.find((m) => m.material.toLowerCase() === matName.toLowerCase());
+    if (matched) {
+      setCategory(matched.category);
+      setUnit(matched.measurement || 'Bags');
+    }
+  };
+
+  const handleReset = () => {
+    setQuantity('');
+    setPurpose('');
+    setNotes('');
+    setErrorText(null);
+  };
+
+  const handleCreateRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorText(null);
+    const qtyNum = parseFloat(quantity);
+
+    if (!site.trim()) {
+      setErrorText('Please specify the construction site.');
+      return;
+    }
+    if (!material.trim()) {
+      setErrorText('Please enter or select a material name.');
+      return;
+    }
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      setErrorText('Please enter a valid requested quantity.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const res = await constructionService.createRequest({
+        site,
+        material: material.trim(),
+        quantity: qtyNum,
+        unit,
+        urgency,
+        requiredDate,
+        purpose: purpose.trim() || undefined,
+        notes: notes.trim() || undefined,
+        requestedBy: user?.name || (isSupervisor ? 'Site Supervisor' : 'Admin Staff'),
+      });
+
+      setSuccessText(
+        `Material Request #${res.requestId || res.id} sent to Admin successfully! Admin will review and dispatch the materials to your site.`
+      );
+      handleReset();
+      setShowAdminCreate(false);
+      setTimeout(() => setSuccessText(null), 5000);
+      await fetchRequestsData();
+      await refreshData();
+    } catch (err: any) {
+      setErrorText(err.response?.data?.message || 'Failed to submit material request.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRejectStatus = async (id: string) => {
+    try {
+      await constructionService.updateRequestStatus(id, 'Rejected');
+      setRequests((prev) =>
+        prev.map((r) => (r.id === id || r.requestId === id ? { ...r, status: 'Rejected' } : r))
+      );
+      setSuccessText('Request rejected.');
+      setTimeout(() => setSuccessText(null), 3000);
+      await refreshData();
+    } catch (err) {
+      console.error('Failed to update request status:', err);
+    }
+  };
+
+  const openDispatchModal = (req: MaterialRequest) => {
+    setDispatchModalReq(req);
+    setDispatchQty(req.quantity.toString());
+    setDispatchNotes(`Dispatched via delivery for site requisition ${req.requestId}`);
+    setDispatchStore('Central Warehouse / Admin Store');
+
+    // Calculate current available stock for this material across inventory
+    const matchedStockItems = inventory.filter(
+      (i) => i.name.toLowerCase() === req.material.toLowerCase()
+    );
+    const available = matchedStockItems.reduce((acc, curr) => acc + (curr.totalStock || 0), 0);
+
+    if (available < req.quantity) {
+      setNeedAddStock(true);
+      const neededDeficit = req.quantity > available ? req.quantity - available : req.quantity;
+      setAddStockQty(neededDeficit.toString());
+      setStockSupplier('Central Wholesale Distributor');
+    } else {
+      setNeedAddStock(false);
+      setAddStockQty('');
+      setStockSupplier('');
+    }
+    setStockInvoice('');
+    setStockUnitPrice('');
+  };
+
+  const handleConfirmDispatch = async () => {
+    if (!dispatchModalReq) return;
+    const qtyNum = parseFloat(dispatchQty);
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      alert('Please enter a valid dispatch quantity.');
+      return;
+    }
+
+    const addQtyNum = needAddStock && addStockQty ? parseFloat(addStockQty) : undefined;
+    if (needAddStock && (addQtyNum === undefined || isNaN(addQtyNum) || addQtyNum <= 0)) {
+      alert('Please enter a valid quantity to add to stock.');
+      return;
+    }
+
+    try {
+      setDispatching(true);
+      const updated = await constructionService.sendMaterialsToSupervisor(
+        dispatchModalReq.id || dispatchModalReq.requestId,
+        {
+          quantity: qtyNum,
+          notes: dispatchNotes,
+          supplierOrStore: dispatchStore,
+          addStockQuantity: needAddStock ? addQtyNum : undefined,
+          supplier: needAddStock ? stockSupplier.trim() || undefined : undefined,
+          invoiceNo: needAddStock ? stockInvoice.trim() || undefined : undefined,
+          unitPrice: needAddStock && stockUnitPrice ? parseFloat(stockUnitPrice) : undefined,
+        }
+      );
+
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === updated.id || r.requestId === updated.requestId ? updated : r
+        )
+      );
+
+      setSuccessText(
+        needAddStock
+          ? `Added ${addQtyNum} ${dispatchModalReq.unit} to stock and dispatched ${qtyNum} ${dispatchModalReq.unit} of ${dispatchModalReq.material} to ${dispatchModalReq.site}!`
+          : `Dispatched ${qtyNum} ${dispatchModalReq.unit} of ${dispatchModalReq.material} to ${dispatchModalReq.site}!`
+      );
+      setDispatchModalReq(null);
+      setTimeout(() => setSuccessText(null), 6000);
+      await fetchRequestsData();
+      await refreshData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to dispatch materials to supervisor.');
+    } finally {
+      setDispatching(false);
+    }
+  };
+
+  // Filter requests
+  const filteredRequests = requests.filter((r) => {
+    if (filterSite !== 'All Sites' && r.site !== filterSite) return false;
+    if (filterStatus !== 'All' && r.status !== filterStatus) return false;
+    return true;
+  });
+
+  const pendingCount = requests.filter((r) => r.status === 'Pending').length;
+  const approvedCount = requests.filter((r) => r.status === 'Approved').length;
+
   return (
-    <div className="space-y-5">
-      {/* Top Header & New Request Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Material Requests</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Submit, track, and approve site material indents and allocations
-          </p>
-        </div>
-        <Button
-          variant="brand"
-          icon={<Plus className="w-4 h-4" />}
-          onClick={() => setShowNewModal(true)}
-        >
-          New Request
-        </Button>
-      </div>
-
-      {/* Main Table Card */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        {/* Tabs & Search Bar */}
-        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg">
-            {(['All', 'Pending', 'Approved', 'Rejected'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all ${
-                  activeTab === tab
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {tab}
-                {tab === 'Pending' && (
-                  <span className="ml-1.5 px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 text-[10px]">
-                    {materialRequests.filter((r) => r.status === 'Pending').length}
-                  </span>
-                )}
-              </button>
-            ))}
+    <div className="space-y-6">
+      {/* Top Banner */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-emerald-50 text-[#0D5C3A] rounded-xl">
+            {isSupervisor ? <Send className="w-6 h-6" /> : <Truck className="w-6 h-6" />}
           </div>
-
-          {/* Search Bar */}
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search requests..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#0D5C3A] text-slate-700"
-            />
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">
+              {isSupervisor ? 'Site Material Requests to Admin' : 'Supervisor Material Requests & Dispatches'}
+            </h1>
+            <p className="text-sm text-slate-500">
+              {isSupervisor
+                ? 'Request materials from Admin for your project site. Admin will approve and send the requested materials to your site inventory.'
+                : 'Review material requisitions from supervisors, accept requests, and send requested materials to site inventory.'}
+            </p>
           </div>
         </div>
 
-        {/* Requests Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="py-3 px-4">Request ID</th>
-                <th className="py-3 px-4">Site</th>
-                <th className="py-3 px-4">Material</th>
-                <th className="py-3 px-4">Quantity</th>
-                <th className="py-3 px-4">Requested By</th>
-                <th className="py-3 px-4">Requested On</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredRequests.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 px-4">
-                    <EmptyState
-                      variant="dashed"
-                      title="No Material Requests Found"
-                      description={
-                        query
-                          ? `No requests match "${query}". Try adjusting your search or tab filter.`
-                          : activeTab !== 'All'
-                          ? `There are currently no requests with status "${activeTab}".`
-                          : 'No material requests have been created yet. Submit your first indent to request resources.'
-                      }
-                      actionLabel="New Request"
-                      onAction={() => setShowNewModal(true)}
-                    />
-                  </td>
-                </tr>
-              ) : (
-                filteredRequests.map((req) => (
-                  <tr key={req.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                      {req.requestId}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-slate-800">{req.site}</td>
-                    <td className="py-3.5 px-4 font-medium text-slate-700">{req.material}</td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {req.quantity} {req.unit}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-600">{req.requestedBy}</td>
-                    <td className="py-3.5 px-4 text-slate-500">{req.requestedOn}</td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          req.status === 'Approved'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : req.status === 'Pending'
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-rose-50 text-rose-700'
-                        }`}
-                      >
-                        {req.status}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => setSelectedRequest(req)}
-                        className="p-1.5 rounded-md text-slate-400 hover:text-[#0D5C3A] hover:bg-emerald-50 transition-colors"
-                        title="View Request Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <span>Showing 1 to {filteredRequests.length} of {materialRequests.length} requests</span>
-          <div className="flex items-center gap-1">
-            <button className="px-2.5 py-1 rounded border border-slate-200 bg-[#0D5C3A] text-white font-bold">
-              1
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdminCreate(!showAdminCreate)}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{showAdminCreate ? 'Hide Request Form' : 'New Request on Behalf'}</span>
             </button>
-            <button className="px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium">
-              2
-            </button>
-            <button className="px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600">
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          )}
+          <span className="text-xs font-bold text-[#0D5C3A] bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-amber-600" />
+            <span>{pendingCount} Pending Approval</span>
+          </span>
         </div>
       </div>
 
-      {/* Request Details Drawer / Modal (Image 3 Screen 6 & Image 4 Screen 12) */}
-      {selectedRequest && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <h3 className="text-lg font-bold text-slate-900">{selectedRequest.requestId}</h3>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    selectedRequest.status === 'Approved'
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : selectedRequest.status === 'Pending'
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-rose-50 text-rose-700'
-                  }`}
-                >
-                  {selectedRequest.status}
-                </span>
-              </div>
-              <button
-                onClick={() => setSelectedRequest(null)}
-                className="text-slate-400 hover:text-slate-700 p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Details Fields Grid */}
-            <div className="py-4 space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-100">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Site</span>
-                  <span className="font-bold text-slate-800">{selectedRequest.site}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Material</span>
-                  <span className="font-bold text-slate-800">{selectedRequest.material}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-100">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Quantity</span>
-                  <span className="font-bold text-slate-800">
-                    {selectedRequest.quantity} {selectedRequest.unit}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Required Date</span>
-                  <span className="font-bold text-slate-800">{selectedRequest.requiredDate}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-100">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Requested By</span>
-                  <span className="font-medium text-slate-700">{selectedRequest.requestedBy}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Requested On</span>
-                  <span className="font-medium text-slate-700">{selectedRequest.requestedOn}</span>
-                </div>
-              </div>
-
-              <div>
-                <span className="text-slate-400 block text-[11px]">Purpose</span>
-                <span className="font-medium text-slate-800">{selectedRequest.purpose}</span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 block text-[11px]">Notes</span>
-                <p className="text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 mt-1 leading-relaxed">
-                  {selectedRequest.notes || 'Required for ongoing construction work stage.'}
-                </p>
-              </div>
-
-              <div>
-                <span className="text-slate-400 block text-[11px]">Attachments</span>
-                <span className="text-slate-500 italic mt-0.5 block">No file attached</span>
+      {/* Admin KPI Overview Cards */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Awaiting Dispatch</span>
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
+                <Clock className="w-4 h-4" />
               </div>
             </div>
+            <p className="text-2xl font-black text-amber-600 mt-2">{pendingCount}</p>
+            <p className="text-[11px] text-slate-400 mt-1 font-medium">Supervisor requests waiting for Admin action</p>
+          </div>
 
-            {/* Action Buttons depending on role */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-              {roleMode === 'admin' ? (
-                <>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => {
-                      setRejectRequestId(selectedRequest.id);
-                    }}
-                  >
-                    Reject
-                  </Button>
-                  <Button
-                    variant="brand"
-                    size="sm"
-                    onClick={() => {
-                      approveRequest(selectedRequest.id);
-                      setSelectedRequest(null);
-                    }}
-                  >
-                    Approve
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setCancelRequestId(selectedRequest.id);
-                  }}
-                  className="text-rose-600 border-rose-200 hover:bg-rose-50"
-                >
-                  Cancel Request
-                </Button>
-              )}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Materials Sent</span>
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                <PackageCheck className="w-4 h-4" />
+              </div>
             </div>
+            <p className="text-2xl font-black text-emerald-700 mt-2">{approvedCount}</p>
+            <p className="text-[11px] text-slate-400 mt-1 font-medium">Fulfilled & dispatched to site stock</p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Requisitions</span>
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                <Layers className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-2xl font-black text-slate-800 mt-2">{requests.length}</p>
+            <p className="text-[11px] text-slate-400 mt-1 font-medium">All historical requests from supervisors</p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Sites</span>
+              <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
+                <Building2 className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-2xl font-black text-slate-800 mt-2">{sites.length}</p>
+            <p className="text-[11px] text-slate-400 mt-1 font-medium">Project sites managed by company</p>
           </div>
         </div>
       )}
 
-      {/* New Request Modal */}
-      {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-base font-bold text-slate-900">Create Material Request</h3>
-              <button
-                onClick={() => setShowNewModal(false)}
-                className="text-slate-400 hover:text-slate-700 p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      {/* Success / Error notification alerts */}
+      {successText && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between gap-3 text-emerald-900 text-sm">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span className="font-semibold">{successText}</span>
+          </div>
+          <button onClick={() => setSuccessText(null)} className="text-emerald-700 hover:text-emerald-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {errorText && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center justify-between gap-3 text-rose-900 text-sm">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <span className="font-semibold">{errorText}</span>
+          </div>
+          <button onClick={() => setErrorText(null)} className="text-rose-700 hover:text-rose-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Form: Raise Site Material Request (Always visible for Supervisor, toggleable for Admin) */}
+      {(isSupervisor || showAdminCreate) && (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-6">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-5">
+            <div className="flex items-center gap-2">
+              <Send className="w-4 h-4 text-[#0D5C3A]" />
+              <h2 className="text-base font-bold text-slate-800">
+                {isSupervisor ? 'Request Materials from Central Admin' : 'Create Material Request on Behalf'}
+              </h2>
             </div>
+            <span className="text-xs text-slate-500 font-semibold bg-slate-100 px-2.5 py-1 rounded-full">
+              Requested by: {user?.name || (isSupervisor ? 'Site Supervisor' : 'Admin Staff')}
+            </span>
+          </div>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
+          <form onSubmit={handleCreateRequest} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Site *</label>
-                {availableSites.length === 0 ? (
-                  <p className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
-                    No assigned construction sites found. You must be assigned to a site by an Admin before requesting materials.
-                  </p>
-                ) : (
-                  <select
-                    value={newReq.site}
-                    onChange={(e) => setNewReq({ ...newReq, site: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
-                  >
-                    {availableSites.map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name} ({s.code})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Material *</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Target Project Site <span className="text-red-500">*</span>
+                </label>
                 <select
-                  value={newReq.material}
-                  onChange={(e) => setNewReq({ ...newReq, material: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
+                  value={site}
+                  onChange={(e) => setSite(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm transition-all font-semibold"
+                  required
                 >
-                  {materials.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
+                  {availableSites.map((s) => (
+                    <option key={s.id || s.name} value={s.name}>
+                      {s.name} {s.location ? `— ${s.location}` : ''}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Quantity *</label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Material Required <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  list="material-request-options"
+                  placeholder="Enter or choose material name"
+                  value={material}
+                  onChange={(e) => handleMaterialSelect(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm transition-all font-semibold"
+                  required
+                />
+                <datalist id="material-request-options">
+                  {inventoryMaster.map((m) => (
+                    <option key={m.id} value={m.material} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Required Quantity <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
                   <input
                     type="number"
+                    step="any"
+                    min="0.1"
+                    placeholder="Quantity"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    className="w-2/3 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm transition-all font-semibold"
                     required
-                    min="1"
-                    value={newReq.quantity}
-                    onChange={(e) => setNewReq({ ...newReq, quantity: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] font-bold"
                   />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Unit</label>
                   <select
-                    value={newReq.unit}
-                    onChange={(e) => setNewReq({ ...newReq, unit: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-[#0D5C3A]"
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    className="w-1/3 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm font-semibold"
                   >
-                    {units.map((u) => (
+                    {MEASUREMENT_OPTIONS.map((u) => (
                       <option key={u} value={u}>
                         {u}
                       </option>
@@ -448,95 +474,572 @@ export const MaterialRequestsPage: React.FC = () => {
                   </select>
                 </div>
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Required Date</label>
-                <input
-                  type="text"
-                  value={newReq.requiredDate}
-                  onChange={(e) => setNewReq({ ...newReq, requiredDate: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
-                />
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Urgency Level <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={urgency}
+                  onChange={(e) => setUrgency(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm font-semibold"
+                >
+                  {URGENCY_OPTIONS.map((u) => (
+                    <option key={u} value={u}>
+                      {u} Priority
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Purpose *</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Needed By Date <span className="text-red-500">*</span>
+                </label>
                 <input
-                  type="text"
+                  type="date"
+                  value={requiredDate}
+                  onChange={(e) => setRequiredDate(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm transition-all font-semibold"
                   required
-                  value={newReq.purpose}
-                  onChange={(e) => setNewReq({ ...newReq, purpose: e.target.value })}
-                  placeholder="e.g. Foundation Work, Slab Casting"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Notes</label>
-                <textarea
-                  rows={2}
-                  value={newReq.notes}
-                  onChange={(e) => setNewReq({ ...newReq, notes: e.target.value })}
-                  placeholder="Special instructions or urgency..."
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] resize-none"
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Purpose / Construction Activity
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Ground floor column beam pour"
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm transition-all font-semibold"
                 />
               </div>
+            </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowNewModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="brand"
-                  size="sm"
-                >
-                  Submit Request
-                </Button>
-              </div>
-            </form>
-          </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                Additional Notes / Site Justification
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Specify preferred supplier brand, vehicle entry timing or on-site storage instructions..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm transition-all resize-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleReset}
+                className="px-4 py-2 text-slate-600 hover:text-slate-800 text-sm font-semibold transition-colors flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Reset</span>
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-6 py-2.5 bg-[#0D5C3A] hover:bg-[#0b4e31] text-white text-sm font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Submitting to Admin...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Send Request to Admin</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* Rejection Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={Boolean(rejectRequestId)}
-        title="Reject Material Request"
-        description="Are you sure you want to reject this indent request? This will mark the request as rejected and alert the site supervisor."
-        confirmLabel="Reject Indent"
-        variant="danger"
-        onConfirm={() => {
-          if (rejectRequestId) {
-            rejectRequest(rejectRequestId);
-            setRejectRequestId(null);
-            setSelectedRequest(null);
-          }
-        }}
-        onCancel={() => setRejectRequestId(null)}
-      />
+      {/* Ledger Table: Site Requisitions & Admin Action Controls */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">
+              {isSupervisor ? 'My Site Requisitions & Delivery Status' : 'Supervisor Requisitions & Dispatch Log'}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {isSupervisor
+                ? 'Track your material requests sent to Admin and monitor when materials are dispatched to your site.'
+                : 'Review pending supervisor requests, approve them, and send materials directly to site inventory.'}
+            </p>
+          </div>
 
-      {/* Cancellation Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={Boolean(cancelRequestId)}
-        title="Cancel Material Request"
-        description="Are you sure you want to cancel your indent request? Once cancelled, site managers will not fulfill this delivery."
-        confirmLabel="Cancel Indent"
-        variant="warning"
-        onConfirm={() => {
-          if (cancelRequestId) {
-            cancelRequest(cancelRequestId);
-            setCancelRequestId(null);
-            setSelectedRequest(null);
-          }
-        }}
-        onCancel={() => setCancelRequestId(null)}
-      />
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700">
+              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={filterSite}
+                onChange={(e) => setFilterSite(e.target.value)}
+                className="bg-transparent focus:outline-none"
+              >
+                <option value="All Sites">All Sites</option>
+                {sites.map((s) => (
+                  <option key={s.id || s.name} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="bg-transparent focus:outline-none"
+              >
+                <option value="All">All Status</option>
+                <option value="Pending">Pending Admin Approval</option>
+                <option value="Approved">Materials Sent / Approved</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+            <Loader2 className="w-6 h-6 animate-spin text-[#0D5C3A]" />
+            <p className="text-sm">Loading material requisitions...</p>
+          </div>
+        ) : filteredRequests.length === 0 ? (
+          <div className="p-12 text-center text-slate-400">
+            <FileSpreadsheet className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="font-semibold text-slate-700">No Material Requisitions Found</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {isSupervisor
+                ? 'You have not submitted any material requests for this filter yet.'
+                : 'No supervisor material requests currently match the selected filters.'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="py-3 px-4">Req # & Date</th>
+                  <th className="py-3 px-4">Site & Supervisor</th>
+                  <th className="py-3 px-4">Material Details</th>
+                  <th className="py-3 px-4">Priority & Needed By</th>
+                  <th className="py-3 px-4">Status & Dispatch Details</th>
+                  {isAdmin && <th className="py-3 px-4 text-center">Admin Dispatch Action</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredRequests.map((req) => (
+                  <tr key={req.id || req.requestId} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3.5 px-4 font-mono text-xs">
+                      <span className="font-bold text-slate-800">{req.requestId || req.id}</span>
+                      <p className="text-[11px] text-slate-400 font-sans mt-0.5">{req.requestedOn}</p>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                        <Building2 className="w-3.5 h-3.5 text-[#0D5C3A]" />
+                        <span>{req.site}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
+                        <User className="w-3 h-3 text-slate-400" />
+                        <span>{req.requestedBy || 'Site Supervisor'}</span>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-slate-900">{req.material}</div>
+                      <div className="text-xs text-slate-600 font-semibold mt-0.5">
+                        {req.quantity}{' '}
+                        <span className="text-[11px] font-normal text-slate-500 uppercase">{req.unit}</span>
+                      </div>
+                      {req.purpose && (
+                        <p className="text-[11px] text-slate-400 italic mt-0.5 line-clamp-1">
+                          For: {req.purpose}
+                        </p>
+                      )}
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          req.urgency === 'Urgent'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : req.urgency === 'High'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {req.urgency || 'Normal'} Priority
+                      </span>
+                      <p className="text-xs text-slate-600 font-medium flex items-center gap-1 mt-1">
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        <span>{req.requiredDate || 'Immediate'}</span>
+                      </p>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      {req.status === 'Approved' ? (
+                        <div>
+                          <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Materials Sent</span>
+                          </span>
+                          <p className="text-[11px] text-emerald-700 font-semibold mt-1">
+                            {req.dispatchedQty || req.quantity} {req.unit} dispatched to site
+                          </p>
+                          {req.dispatchedOn && (
+                            <p className="text-[10px] text-slate-400">On: {req.dispatchedOn}</p>
+                          )}
+                        </div>
+                      ) : req.status === 'Rejected' ? (
+                        <div>
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200">
+                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Declined</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Waiting Admin Approval</span>
+                          </span>
+                          <p className="text-[11px] text-slate-400 mt-1">Awaiting dispatch by admin</p>
+                        </div>
+                      )}
+                    </td>
+
+                    {isAdmin && (
+                      <td className="py-3.5 px-4 text-center">
+                        {req.status === 'Pending' ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openDispatchModal(req)}
+                              className="px-3 py-1.5 bg-[#0D5C3A] hover:bg-[#0b4e31] text-white text-xs font-bold rounded-lg shadow-xs transition-all flex items-center gap-1.5"
+                              title="Accept request and send materials to supervisor site"
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                              <span>Accept & Send</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRejectStatus(req.id || req.requestId)}
+                              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg border border-rose-200 transition-colors flex items-center gap-1"
+                              title="Reject request"
+                            >
+                              <X className="w-3 h-3" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        ) : req.status === 'Approved' ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Sent to Supervisor</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium">Closed</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Admin Dispatch Confirmation Modal */}
+      {dispatchModalReq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Header */}
+            <div className="bg-[#0D5C3A] text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/10 rounded-xl">
+                  <Truck className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Send Materials to Supervisor</h3>
+                  <p className="text-xs text-white/80">
+                    Accept request and dispatch to {dispatchModalReq.site}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDispatchModalReq(null)}
+                className="text-white/70 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {/* Request Summary Card */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-bold text-slate-700">
+                    #{dispatchModalReq.requestId || dispatchModalReq.id}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                    {dispatchModalReq.urgency || 'Normal'} Urgency
+                  </span>
+                </div>
+
+                <div className="text-sm">
+                  <span className="text-slate-500">Requested Material:</span>{' '}
+                  <span className="font-bold text-slate-900">{dispatchModalReq.material}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-slate-600">
+                  <span>
+                    Requested Qty:{' '}
+                    <strong className="text-slate-900">
+                      {dispatchModalReq.quantity} {dispatchModalReq.unit}
+                    </strong>
+                  </span>
+                  <span>
+                    Supervisor:{' '}
+                    <strong className="text-slate-900">{dispatchModalReq.requestedBy}</strong>
+                  </span>
+                </div>
+
+                {dispatchModalReq.purpose && (
+                  <p className="text-xs text-slate-500 italic">Purpose: {dispatchModalReq.purpose}</p>
+                )}
+              </div>
+
+              {/* Stock Availability Indicator */}
+              {(() => {
+                const matchedStockItems = inventory.filter(
+                  (i) => i.name.toLowerCase() === dispatchModalReq.material.toLowerCase()
+                );
+                const totalAvailStock = matchedStockItems.reduce(
+                  (acc, curr) => acc + (curr.totalStock || 0),
+                  0
+                );
+                const reqQtyNum = parseFloat(dispatchQty) || dispatchModalReq.quantity;
+                const isDeficit = totalAvailStock < reqQtyNum;
+
+                return (
+                  <div className="space-y-3">
+                    {isDeficit ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-900 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>
+                              Stock Deficit: Only <strong>{totalAvailStock} {dispatchModalReq.unit}</strong> available (Need {reqQtyNum} {dispatchModalReq.unit})
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/80 text-amber-900">
+                            Restock Required
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-700 font-normal">
+                          You do not have enough stock in the warehouse. Add stock below before dispatching to {dispatchModalReq.site}.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-900">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>
+                            Warehouse Stock Available: <strong>{totalAvailStock} {dispatchModalReq.unit}</strong>
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!needAddStock && !addStockQty) {
+                              setAddStockQty('50');
+                              setStockSupplier('Central Wholesale Distributor');
+                            }
+                            setNeedAddStock(!needAddStock);
+                          }}
+                          className="text-xs font-bold text-emerald-800 underline hover:text-emerald-950"
+                        >
+                          {needAddStock ? 'Hide Stock Addition' : '+ Add Stock to Warehouse'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Restock Section */}
+                    {needAddStock && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <Plus className="w-3.5 h-3.5 text-[#0D5C3A]" />
+                            <span>Procure / Add to Warehouse Stock</span>
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+                            Stock Intake
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 uppercase mb-1">
+                              Quantity to Add ({dispatchModalReq.unit}) <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.1"
+                              value={addStockQty}
+                              onChange={(e) => setAddStockQty(e.target.value)}
+                              placeholder="e.g. 50"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A]"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 uppercase mb-1">
+                              Supplier / Vendor Name
+                            </label>
+                            <input
+                              type="text"
+                              value={stockSupplier}
+                              onChange={(e) => setStockSupplier(e.target.value)}
+                              placeholder="e.g. UltraTech Wholesale Dealer"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 uppercase mb-1">
+                              Invoice / Batch DC Ref
+                            </label>
+                            <input
+                              type="text"
+                              value={stockInvoice}
+                              onChange={(e) => setStockInvoice(e.target.value)}
+                              placeholder="e.g. INV-2026-9021"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 uppercase mb-1">
+                              Unit Price (₹) (Optional)
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={stockUnitPrice}
+                              onChange={(e) => setStockUnitPrice(e.target.value)}
+                              placeholder="e.g. 380"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A]"
+                            />
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-slate-500 italic">
+                          This intake will automatically add {addStockQty || '0'} {dispatchModalReq.unit} to warehouse stock before dispatching {dispatchQty || '0'} {dispatchModalReq.unit} to {dispatchModalReq.site}.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Dispatch Form Inputs */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Quantity to Send / Dispatch ({dispatchModalReq.unit}) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0.1"
+                  value={dispatchQty}
+                  onChange={(e) => setDispatchQty(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A] text-sm"
+                  required
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  This dispatch will be recorded in Material Outward for {dispatchModalReq.site}.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Dispatch Source Warehouse / Store
+                </label>
+                <input
+                  type="text"
+                  value={dispatchStore}
+                  onChange={(e) => setDispatchStore(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Dispatch Note / Delivery Instructions
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sent via Delivery Truck TN-45-7890 with batch slip"
+                  value={dispatchNotes}
+                  onChange={(e) => setDispatchNotes(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D5C3A]/20 focus:border-[#0D5C3A]"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDispatchModalReq(null)}
+                className="px-4 py-2 text-slate-600 hover:text-slate-800 text-sm font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={dispatching}
+                onClick={handleConfirmDispatch}
+                className="px-5 py-2.5 bg-[#0D5C3A] hover:bg-[#0b4e31] text-white text-sm font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {dispatching ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Processing Dispatch...</span>
+                  </>
+                ) : (
+                  <>
+                    <Truck className="w-4 h-4" />
+                    <span>
+                      {needAddStock ? 'Add Stock & Dispatch to Site' : 'Confirm & Send Materials'}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+export default MaterialRequestsPage;

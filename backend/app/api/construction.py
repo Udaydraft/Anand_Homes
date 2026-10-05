@@ -15,6 +15,7 @@ settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR = settings.UPLOAD_DIR
 from app.models.user import UserModel
 from app.schemas.construction import (
+    ActivityCreate,
     ActivityResponse,
     DashboardSummaryResponse,
     DeliveryCreate,
@@ -26,6 +27,7 @@ from app.schemas.construction import (
     MaterialRequestCreate,
     MaterialRequestResponse,
     RequestStatusUpdate,
+    SendMaterialsRequest,
     SiteCreate,
     SitePhotoCreate,
     SitePhotoResponse,
@@ -34,6 +36,23 @@ from app.schemas.construction import (
     StockInRequest,
     StockOutRequest,
     StockTransactionResponse,
+    ProjectMasterCreate,
+    ProjectMasterUpdate,
+    ProjectMasterResponse,
+    SupervisorMasterCreate,
+    SupervisorMasterUpdate,
+    SupervisorMasterResponse,
+    ProjectDurationCreate,
+    ProjectDurationResponse,
+    InventoryMasterCreate,
+    InventoryMasterUpdate,
+    InventoryMasterResponse,
+    InwardMaterialCreate,
+    InwardMaterialResponse,
+    OutwardMaterialCreate,
+    OutwardMaterialResponse,
+    LabourEntryCreate,
+    LabourEntryResponse,
 )
 from app.schemas.user import ApiResponse
 from app.services.construction_service import ConstructionService
@@ -147,12 +166,14 @@ async def list_inventory(
 @router.get("/inventory/low-stock", response_model=ApiResponse[List[Dict[str, Any]]])
 async def get_low_stock(
     site: Optional[str] = Query(None, description="Filter low stock by site name"),
+    all_projects: bool = Query(True, description="Return alerts across all projects"),
     current_user: Optional[UserModel] = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     service = ConstructionService(db)
-    allowed_sites = await _resolve_allowed_sites(service, current_user)
-    alerts = await service.get_low_stock(site, allowed_sites=allowed_sites)
+    # If all_projects is requested or no specific site is specified, return across all project locations
+    allowed_sites = None if (all_projects or not site) else await _resolve_allowed_sites(service, current_user)
+    alerts = await service.get_low_stock(site if not all_projects else None, allowed_sites=allowed_sites)
     return ApiResponse(success=True, message="Low stock alerts retrieved", data=alerts)
 
 
@@ -249,6 +270,39 @@ async def update_request_status(
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
     return ApiResponse(success=True, message=f"Request status updated to {payload.status}", data=req)
+
+
+@router.post("/requests/{request_id}/send-materials", response_model=ApiResponse[MaterialRequestResponse])
+async def send_materials_to_supervisor(
+    request_id: str,
+    payload: Optional[SendMaterialsRequest] = None,
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    service = ConstructionService(db)
+    admin_name = current_user.name if current_user and current_user.name else "Admin User"
+    dispatched_qty = payload.quantity if payload else None
+    dispatch_notes = payload.notes if payload else None
+    supplier_or_store = payload.supplierOrStore if payload else "Central Warehouse / Admin"
+
+    req = await service.send_materials_to_supervisor(
+        request_id=request_id,
+        dispatched_qty=dispatched_qty,
+        dispatch_notes=dispatch_notes,
+        supplier_or_store=supplier_or_store,
+        admin_name=admin_name,
+        add_stock_qty=payload.addStockQuantity if payload else None,
+        supplier=payload.supplier if payload else None,
+        invoice_no=payload.invoiceNo if payload else None,
+        unit_price=payload.unitPrice if payload else None,
+    )
+    if not req:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+    return ApiResponse(
+        success=True,
+        message=f"Materials successfully dispatched and sent to supervisor for request {req.requestId}",
+        data=req,
+    )
 
 
 @router.delete("/requests/{request_id}", response_model=ApiResponse[dict])
@@ -425,8 +479,30 @@ async def list_activities(
 ):
     service = ConstructionService(db)
     allowed_sites = await _resolve_allowed_sites(service, current_user)
-    acts = await service.list_activities(site, limit, allowed_sites=allowed_sites)
+    role = "admin" if (current_user and current_user.role == "admin") else ("supervisor" if current_user else None)
+    acts = await service.list_activities(site, limit, allowed_sites=allowed_sites, role=role)
     return ApiResponse(success=True, message="Activities retrieved", data=acts)
+
+
+@router.post("/activities", response_model=ApiResponse[ActivityResponse], status_code=status.HTTP_201_CREATED)
+async def create_activity(
+    payload: ActivityCreate,
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    service = ConstructionService(db)
+    actor_name = current_user.name if current_user else (payload.actor or "User")
+    target_role = payload.targetRole or ("supervisor" if (current_user and current_user.role == "admin") else "admin")
+    act = await service.log_activity(
+        text=payload.text,
+        site=payload.site,
+        act_type=payload.type or "request",
+        subtext=payload.subtext,
+        actor=actor_name,
+        target_role=target_role,
+        words=payload.words or payload.text,
+    )
+    return ApiResponse(success=True, message="Activity recorded and dispatched", data=act)
 
 
 @router.get("/dashboard/summary", response_model=ApiResponse[DashboardSummaryResponse])
@@ -456,3 +532,204 @@ async def seed_data(db: AsyncIOMotorDatabase = Depends(get_database)):
     service = ConstructionService(db)
     await service.seed_database_if_empty()
     return ApiResponse(success=True, message="Database seeded with initial construction data", data={})
+
+
+# ---------------------------------------------------------------------------
+# Key Screens: 1 & 2. Project Master
+# ---------------------------------------------------------------------------
+@router.get("/projects", response_model=ApiResponse[List[ProjectMasterResponse]])
+async def list_projects(db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    projects = await service.list_projects_master()
+    return ApiResponse(success=True, message="Projects retrieved", data=projects)
+
+
+@router.post("/projects", response_model=ApiResponse[ProjectMasterResponse])
+async def create_project(data: ProjectMasterCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    project = await service.create_project_master(data)
+    return ApiResponse(success=True, message="Project created successfully", data=project)
+
+
+@router.put("/projects/{project_id}", response_model=ApiResponse[ProjectMasterResponse])
+async def update_project(project_id: str, data: ProjectMasterUpdate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    project = await service.update_project_master(project_id, data)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return ApiResponse(success=True, message="Project updated successfully", data=project)
+
+
+@router.delete("/projects/{project_id}", response_model=ApiResponse[dict])
+async def delete_project(project_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    deleted = await service.delete_project_master(project_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return ApiResponse(success=True, message="Project deleted successfully", data={})
+
+
+# ---------------------------------------------------------------------------
+# Key Screens: 3. Supervisor Master
+# ---------------------------------------------------------------------------
+@router.get("/supervisors", response_model=ApiResponse[List[SupervisorMasterResponse]])
+async def list_supervisors(db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    supervisors = await service.list_supervisors_master()
+    return ApiResponse(success=True, message="Supervisors retrieved", data=supervisors)
+
+
+@router.post("/supervisors", response_model=ApiResponse[SupervisorMasterResponse])
+async def create_supervisor(data: SupervisorMasterCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    supervisor = await service.create_supervisor_master(data)
+    return ApiResponse(success=True, message="Supervisor created successfully", data=supervisor)
+
+
+@router.put("/supervisors/{supervisor_id}", response_model=ApiResponse[SupervisorMasterResponse])
+async def update_supervisor(supervisor_id: str, data: SupervisorMasterUpdate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    supervisor = await service.update_supervisor_master(supervisor_id, data)
+    if not supervisor:
+        raise HTTPException(status_code=404, detail="Supervisor not found")
+    return ApiResponse(success=True, message="Supervisor updated successfully", data=supervisor)
+
+
+@router.delete("/supervisors/{supervisor_id}", response_model=ApiResponse[dict])
+async def delete_supervisor(supervisor_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    deleted = await service.delete_supervisor_master(supervisor_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Supervisor not found")
+    return ApiResponse(success=True, message="Supervisor deleted successfully", data={})
+
+
+# ---------------------------------------------------------------------------
+# Key Screens: 4. Project Duration
+# ---------------------------------------------------------------------------
+@router.get("/project-durations", response_model=ApiResponse[List[ProjectDurationResponse]])
+async def list_project_durations(db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    durations = await service.list_project_durations()
+    return ApiResponse(success=True, message="Project durations retrieved", data=durations)
+
+
+@router.post("/project-durations", response_model=ApiResponse[ProjectDurationResponse])
+async def create_project_duration(data: ProjectDurationCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    duration = await service.create_project_duration(data)
+    return ApiResponse(success=True, message="Project duration saved", data=duration)
+
+
+@router.delete("/project-durations/{duration_id}", response_model=ApiResponse[dict])
+async def delete_project_duration(duration_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    deleted = await service.delete_project_duration(duration_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Project duration not found")
+    return ApiResponse(success=True, message="Project duration deleted", data={})
+
+
+# ---------------------------------------------------------------------------
+# Key Screens: 5. Inventory Master
+# ---------------------------------------------------------------------------
+@router.get("/inventory-master", response_model=ApiResponse[List[InventoryMasterResponse]])
+async def list_inventory_master(db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    items = await service.list_inventory_master()
+    return ApiResponse(success=True, message="Inventory master items retrieved", data=items)
+
+
+@router.post("/inventory-master", response_model=ApiResponse[InventoryMasterResponse])
+async def create_inventory_master(data: InventoryMasterCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    item = await service.create_inventory_master(data)
+    return ApiResponse(success=True, message="Inventory master item created", data=item)
+
+
+@router.put("/inventory-master/{item_id}", response_model=ApiResponse[InventoryMasterResponse])
+async def update_inventory_master(item_id: str, data: InventoryMasterUpdate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    item = await service.update_inventory_master(item_id, data)
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory master item not found")
+    return ApiResponse(success=True, message="Inventory master item updated", data=item)
+
+
+@router.delete("/inventory-master/{item_id}", response_model=ApiResponse[dict])
+async def delete_inventory_master(item_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    deleted = await service.delete_inventory_master(item_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Inventory master item not found")
+    return ApiResponse(success=True, message="Inventory master item deleted", data={})
+
+
+# ---------------------------------------------------------------------------
+# Key Screens: 6. Inward Material Entry
+# ---------------------------------------------------------------------------
+@router.get("/material-inward", response_model=ApiResponse[List[InwardMaterialResponse]])
+async def list_material_inward(
+    site: Optional[str] = Query(None, description="Filter inward entries by site name"),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    service = ConstructionService(db)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    entries = await service.list_inward_materials(site=site, allowed_sites=allowed_sites)
+    return ApiResponse(success=True, message="Inward material entries retrieved", data=entries)
+
+
+@router.post("/material-inward", response_model=ApiResponse[InwardMaterialResponse])
+async def create_material_inward(data: InwardMaterialCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    entry = await service.create_inward_material(data)
+    return ApiResponse(success=True, message="Inward material recorded and code generated", data=entry)
+
+
+# ---------------------------------------------------------------------------
+# Key Screens: 7. Outward Material Entry
+# ---------------------------------------------------------------------------
+@router.get("/material-outward", response_model=ApiResponse[List[OutwardMaterialResponse]])
+async def list_material_outward(
+    site: Optional[str] = Query(None, description="Filter outward entries by site name"),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    service = ConstructionService(db)
+    allowed_sites = await _resolve_allowed_sites(service, current_user)
+    entries = await service.list_outward_materials(site=site, allowed_sites=allowed_sites)
+    return ApiResponse(success=True, message="Outward material entries retrieved", data=entries)
+
+
+@router.post("/material-outward", response_model=ApiResponse[OutwardMaterialResponse])
+async def create_material_outward(data: OutwardMaterialCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    entry = await service.create_outward_material(data)
+    return ApiResponse(success=True, message="Outward material recorded", data=entry)
+
+
+# ---------------------------------------------------------------------------
+# Key Screens: 8. Labour Entry
+# ---------------------------------------------------------------------------
+@router.get("/labour-entries", response_model=ApiResponse[List[LabourEntryResponse]])
+async def list_labour_entries(db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    entries = await service.list_labour_entries()
+    return ApiResponse(success=True, message="Labour entries retrieved", data=entries)
+
+
+@router.post("/labour-entries", response_model=ApiResponse[LabourEntryResponse])
+async def create_labour_entry(data: LabourEntryCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    entry = await service.create_labour_entry(data)
+    return ApiResponse(success=True, message="Labour entry recorded", data=entry)
+
+
+@router.delete("/labour-entries/{entry_id}", response_model=ApiResponse[dict])
+async def delete_labour_entry(entry_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    service = ConstructionService(db)
+    deleted = await service.delete_labour_entry(entry_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Labour entry not found")
+    return ApiResponse(success=True, message="Labour entry deleted", data={})

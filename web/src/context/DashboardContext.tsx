@@ -7,6 +7,11 @@ import {
   SitePhoto,
   LowStockAlertItem,
   ActivityItem,
+  InwardMaterialEntry,
+  OutwardMaterialEntry,
+  LabourEntry,
+  ProjectMaster,
+  InventoryMasterItem,
 } from '@project/shared';
 import { constructionService } from '../services/construction.service';
 import { useAuth } from '../hooks/useAuth';
@@ -16,6 +21,7 @@ export type UserRoleMode = 'admin' | 'supervisor';
 interface DashboardContextType {
   roleMode: UserRoleMode;
   setRoleMode: (mode: UserRoleMode) => void;
+  isSupervisor: boolean;
   selectedSite: string;
   setSelectedSite: (site: string) => void;
   sitesList: string[];
@@ -27,6 +33,11 @@ interface DashboardContextType {
   photos: SitePhoto[];
   lowStockAlerts: LowStockAlertItem[];
   activities: ActivityItem[];
+  inwardEntries: InwardMaterialEntry[];
+  outwardEntries: OutwardMaterialEntry[];
+  labourEntries: LabourEntry[];
+  projectsMaster: ProjectMaster[];
+  inventoryMaster: InventoryMasterItem[];
   globalSearch: string;
   setGlobalSearch: (s: string) => void;
   selectedDate: string;
@@ -58,11 +69,24 @@ interface DashboardContextType {
     material: string;
     quantity: number;
     unit: string;
+    urgency?: string;
     purpose?: string;
     notes?: string;
     requiredDate?: string;
   }) => Promise<void>;
   approveRequest: (id: string) => Promise<void>;
+  sendMaterialsToSupervisor: (
+    id: string,
+    data?: {
+      quantity?: number;
+      notes?: string;
+      supplierOrStore?: string;
+      addStockQuantity?: number;
+      supplier?: string;
+      invoiceNo?: string;
+      unitPrice?: number;
+    }
+  ) => Promise<void>;
   rejectRequest: (id: string) => Promise<void>;
   cancelRequest: (id: string) => Promise<void>;
   recordDelivery: (data: {
@@ -120,7 +144,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
 
-  // Data collections (Empty - loaded from MongoDB via API)
+  // Data collections (Loaded from MongoDB via API)
   const [sites, setSites] = useState<Site[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>([]);
@@ -128,6 +152,11 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [photos, setPhotos] = useState<SitePhoto[]>([]);
   const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlertItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [inwardEntries, setInwardEntries] = useState<InwardMaterialEntry[]>([]);
+  const [outwardEntries, setOutwardEntries] = useState<OutwardMaterialEntry[]>([]);
+  const [labourEntries, setLabourEntries] = useState<LabourEntry[]>([]);
+  const [projectsMaster, setProjectsMaster] = useState<ProjectMaster[]>([]);
+  const [inventoryMaster, setInventoryMaster] = useState<InventoryMasterItem[]>([]);
 
   // Compute supervisor's assigned sites (explicit linkage, no false cross-sharing)
   const myAssignedSites = sites.filter((s) => {
@@ -155,53 +184,61 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [isSupervisor, sites, user]);
 
-  // Fetch all data from backend API
+  // Fetch all active data from backend API in parallel without old deprecated blocking calls
   const refreshData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      // 1. Sites
-      const backendSites = await constructionService.getSites();
-      if (Array.isArray(backendSites)) {
-        setSites(backendSites);
-      }
+      const [
+        sitesRes,
+        invRes,
+        lowStockRes,
+        inwardRes,
+        outwardRes,
+        labourRes,
+        projectsRes,
+        masterRes,
+        actRes,
+      ] = await Promise.allSettled([
+        constructionService.getSites(),
+        constructionService.getInventory(selectedSite),
+        constructionService.getLowStock(selectedSite),
+        constructionService.getMaterialInward(selectedSite),
+        constructionService.getMaterialOutward(selectedSite),
+        constructionService.getLabourEntries(),
+        constructionService.getProjectsMaster(),
+        constructionService.getInventoryMaster(),
+        constructionService.getActivities(selectedSite),
+      ]);
 
-      // 2. Inventory
-      const backendInv = await constructionService.getInventory(selectedSite);
-      if (Array.isArray(backendInv)) {
-        setInventory(backendInv);
+      if (sitesRes.status === 'fulfilled' && Array.isArray(sitesRes.value)) {
+        setSites(sitesRes.value);
       }
-
-      // 3. Low stock alerts
-      const backendAlerts = await constructionService.getLowStock(selectedSite);
-      if (Array.isArray(backendAlerts)) {
-        setLowStockAlerts(backendAlerts);
+      if (invRes.status === 'fulfilled' && Array.isArray(invRes.value)) {
+        setInventory(invRes.value);
       }
-
-      // 4. Requests
-      const backendReqs = await constructionService.getRequests(selectedSite);
-      if (Array.isArray(backendReqs)) {
-        setMaterialRequests(backendReqs);
+      if (lowStockRes.status === 'fulfilled' && Array.isArray(lowStockRes.value)) {
+        setLowStockAlerts(lowStockRes.value);
       }
-
-      // 5. Deliveries
-      const backendDelivs = await constructionService.getDeliveries(selectedSite);
-      if (Array.isArray(backendDelivs)) {
-        setDeliveries(backendDelivs);
+      if (inwardRes.status === 'fulfilled' && Array.isArray(inwardRes.value)) {
+        setInwardEntries(inwardRes.value);
       }
-
-      // 6. Photos
-      const backendPhotos = await constructionService.getPhotos(selectedSite);
-      if (Array.isArray(backendPhotos)) {
-        setPhotos(backendPhotos);
+      if (outwardRes.status === 'fulfilled' && Array.isArray(outwardRes.value)) {
+        setOutwardEntries(outwardRes.value);
       }
-
-      // 7. Activities
-      const backendActs = await constructionService.getActivities(selectedSite);
-      if (Array.isArray(backendActs)) {
-        setActivities(backendActs);
+      if (labourRes.status === 'fulfilled' && Array.isArray(labourRes.value)) {
+        setLabourEntries(labourRes.value);
+      }
+      if (projectsRes.status === 'fulfilled' && Array.isArray(projectsRes.value)) {
+        setProjectsMaster(projectsRes.value);
+      }
+      if (masterRes.status === 'fulfilled' && Array.isArray(masterRes.value)) {
+        setInventoryMaster(masterRes.value);
+      }
+      if (actRes.status === 'fulfilled' && Array.isArray(actRes.value)) {
+        setActivities(actRes.value);
       }
     } catch (err) {
-      console.warn('Backend API currently unreachable, using local state:', err);
+      console.warn('Dashboard data refresh error:', err);
     } finally {
       setIsLoadingData(false);
     }
@@ -304,6 +341,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     material: string;
     quantity: number;
     unit: string;
+    urgency?: string;
     purpose?: string;
     notes?: string;
     requiredDate?: string;
@@ -322,6 +360,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         material: data.material,
         quantity: data.quantity,
         unit: data.unit,
+        urgency: data.urgency || 'Normal',
         requestedBy: roleMode === 'admin' ? 'Admin User' : 'Site Supervisor',
         requestedOn: 'Today',
         requiredDate: data.requiredDate || 'Next week',
@@ -340,6 +379,39 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch {
       setMaterialRequests((prev) =>
         prev.map((r) => (r.id === id || r.requestId === id ? { ...r, status: 'Approved' } : r))
+      );
+    }
+  };
+
+  const sendMaterialsToSupervisor = async (
+    id: string,
+    data?: {
+      quantity?: number;
+      notes?: string;
+      supplierOrStore?: string;
+      addStockQuantity?: number;
+      supplier?: string;
+      invoiceNo?: string;
+      unitPrice?: number;
+    }
+  ) => {
+    try {
+      await constructionService.sendMaterialsToSupervisor(id, data);
+      await refreshData();
+    } catch {
+      setMaterialRequests((prev) =>
+        prev.map((r) =>
+          r.id === id || r.requestId === id
+            ? {
+                ...r,
+                status: 'Approved',
+                dispatchedQty: data?.quantity || r.quantity,
+                dispatchedOn: 'Today',
+                dispatchedBy: 'Admin User',
+                dispatchNotes: data?.notes,
+              }
+            : r
+        )
       );
     }
   };
@@ -511,6 +583,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       value={{
         roleMode,
         setRoleMode,
+        isSupervisor,
         selectedSite,
         setSelectedSite,
         sitesList,
@@ -522,6 +595,11 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         photos,
         lowStockAlerts,
         activities,
+        inwardEntries,
+        outwardEntries,
+        labourEntries,
+        projectsMaster,
+        inventoryMaster,
         globalSearch,
         setGlobalSearch,
         selectedDate,
@@ -532,6 +610,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         addStockOut,
         createMaterialRequest,
         approveRequest,
+        sendMaterialsToSupervisor,
         rejectRequest,
         cancelRequest,
         recordDelivery,

@@ -4,7 +4,14 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database.mongodb import get_database, db_manager
 from app.dependencies.auth import get_current_user, require_admin
 from app.models.user import UserModel
-from app.schemas.user import ApiResponse, UserProfileUpdateRequest, UserRegisterRequest, UserResponse, UserUpdateRequest
+from app.schemas.user import (
+    ApiResponse,
+    ChangePasswordRequest,
+    UserProfileUpdateRequest,
+    UserRegisterRequest,
+    UserResponse,
+    UserUpdateRequest,
+)
 from app.services.auth_service import AuthService
 from app.services.user_service import UserService
 
@@ -103,6 +110,26 @@ async def update_profile(
         success=True,
         message="Profile updated successfully",
         data=UserService.to_response(updated_user),
+    )
+
+
+@router.post(
+    "/change-password",
+    response_model=ApiResponse[dict],
+    status_code=status.HTTP_200_OK,
+    summary="Change password for authenticated user",
+)
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ApiResponse[dict]:
+    auth_service = AuthService(db)
+    result = await auth_service.change_password(current_user.id, payload)
+    return ApiResponse(
+        success=True,
+        message=result.get("message", "Password changed successfully"),
+        data=result,
     )
 
 

@@ -43,9 +43,14 @@ export interface MaterialRequest {
   requestedOn: string;
   requiredDate?: string;
   purpose?: string;
+  urgency?: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   notes?: string;
   attachments?: string;
+  dispatchedQty?: number;
+  dispatchedOn?: string;
+  dispatchedBy?: string;
+  dispatchNotes?: string;
 }
 
 export interface Delivery {
@@ -93,5 +98,93 @@ export interface ActivityItem {
   subtext?: string;
   site: string;
   time: string;
-  type: 'stock_in' | 'stock_out' | 'request' | 'delivery' | 'photo';
+  type: 'stock_in' | 'stock_out' | 'request' | 'delivery' | 'photo' | string;
+  actor?: string;
+  targetRole?: string;
+  words?: string;
+  status?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Construction & Project Material Inventory Management - Key Master & Transactions
+// ---------------------------------------------------------------------------
+
+export interface ProjectMaster {
+  id: string;
+  projectName: string;
+  siteName: string;
+  createdOn: string;
+  status?: string;
+}
+
+export interface SupervisorMaster {
+  id: string;
+  name: string;
+  loginId: string;
+  password?: string;
+  project: string;
+  site: string;
+  createdOn?: string;
+}
+
+export interface ProjectDuration {
+  id: string;
+  projectName: string;
+  siteName: string;
+  fromDate: string;
+  toDate: string;
+  createdOn?: string;
+}
+
+export interface InventoryMasterItem {
+  id: string;
+  category: string;
+  material: string;
+  measurement: string;
+  materialType?: 'Prime' | 'Other';
+  natureOfWork?: string[];
+  createdOn?: string;
+  initialStock?: number;
+  minStock?: number;
+  site?: string;
+}
+
+export interface InwardMaterialEntry {
+  id: string;
+  entryCode: string;
+  date: string;
+  site?: string;
+  project?: string;
+  category: string;
+  material: string;
+  quantity: number;
+  measurement: string;
+  totalValue: number;
+  unitPrice: number;
+  createdOn?: string;
+}
+
+export interface OutwardMaterialEntry {
+  id: string;
+  outwardId?: string;
+  date: string;
+  project: string;
+  site: string;
+  material?: string;
+  natureOfWork: string;
+  quantity: number;
+  measurement: string;
+  notes?: string;
+  createdOn?: string;
+}
+
+export interface LabourEntry {
+  id: string;
+  date: string;
+  project: string;
+  site: string;
+  natureOfWork: string;
+  type: 'Count (Labour)' | 'Other';
+  workerCount: number;
+  createdOn?: string;
 }

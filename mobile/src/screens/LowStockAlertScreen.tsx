@@ -17,11 +17,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'LowStockAlert'>;
 export const LowStockAlertScreen: React.FC<Props> = ({ navigation }) => {
   const { lowStockAlerts, myAssignedSites, roleMode } = useMobileData();
 
-  const alerts =
-    roleMode === 'supervisor'
-      ? lowStockAlerts.filter((a) => myAssignedSites.some((s) => s.name === a.site))
-      : lowStockAlerts;
-
+  // Show all project low stock alerts across the entire platform
+  const alerts = lowStockAlerts;
   const countFormatted = alerts.length.toString().padStart(2, '0');
 
   return (
@@ -80,9 +77,9 @@ export const LowStockAlertScreen: React.FC<Props> = ({ navigation }) => {
 
             <TouchableOpacity
               style={styles.reqBtn}
-              onPress={() => navigation.navigate('MaterialRequests')}
+              onPress={() => navigation.navigate('MaterialInward')}
             >
-              <Text style={styles.reqBtnText}>Create Material Request</Text>
+              <Text style={styles.reqBtnText}>Record Inward Material</Text>
             </TouchableOpacity>
           </View>
         ))}

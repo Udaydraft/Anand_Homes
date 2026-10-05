@@ -22,9 +22,8 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Path mapping */
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
+      "@/*": ["./src/*"],
       "@project/shared": ["../packages/shared/index.ts"],
       "@project/shared/*": ["../packages/shared/*"]
     }

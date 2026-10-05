@@ -25,6 +25,23 @@ from app.schemas.construction import (
     StockInRequest,
     StockOutRequest,
     StockTransactionResponse,
+    ProjectMasterCreate,
+    ProjectMasterUpdate,
+    ProjectMasterResponse,
+    SupervisorMasterCreate,
+    SupervisorMasterUpdate,
+    SupervisorMasterResponse,
+    ProjectDurationCreate,
+    ProjectDurationResponse,
+    InventoryMasterCreate,
+    InventoryMasterUpdate,
+    InventoryMasterResponse,
+    InwardMaterialCreate,
+    InwardMaterialResponse,
+    OutwardMaterialCreate,
+    OutwardMaterialResponse,
+    LabourEntryCreate,
+    LabourEntryResponse,
 )
 
 logger = logging.getLogger("app.services.construction")
@@ -60,6 +77,13 @@ class ConstructionService:
         self.deliveries = db["deliveries"]
         self.photos = db["site_photos"]
         self.activities = db["activities"]
+        self.projects_master = db["projects_master"]
+        self.supervisors_master = db["supervisors_master"]
+        self.project_durations = db["project_durations"]
+        self.inventory_master = db["inventory_master"]
+        self.material_inward = db["material_inward"]
+        self.material_outward = db["material_outward"]
+        self.labour_entries = db["labour_entries"]
 
     # -----------------------------------------------------------------------
     # Helper
@@ -81,6 +105,12 @@ class ConstructionService:
             doc["id"] = str(doc["_id"])
         elif "_id" in doc:
             doc.pop("_id", None)
+        if "supervisor" not in doc or not doc["supervisor"]:
+            doc["supervisor"] = "Unassigned"
+        if "code" not in doc or not doc["code"]:
+            doc["code"] = "SITE-001"
+        if "location" not in doc or not doc["location"]:
+            doc["location"] = "On-site"
         return doc
 
     # -----------------------------------------------------------------------
@@ -270,23 +300,72 @@ class ConstructionService:
         query: Dict[str, Any], site: Optional[str], allowed_sites: Optional[List[str]]
     ) -> bool:
         """Helper to apply site/allowed_sites scoping. Returns False if query should return empty set immediately."""
+        is_all = not site or site.strip().lower() in ("all", "all sites", "")
         if allowed_sites is not None:
             if not allowed_sites:
                 return False
-            if site and site.lower() != "all":
+            if not is_all:
                 if site in allowed_sites:
                     query["site"] = site
                 else:
                     return False
             else:
-                query["site"] = {"$in": allowed_sites}
-        elif site and site.lower() != "all":
+                query["site"] = {"$in": allowed_sites + ["All Sites"]}
+        elif not is_all:
             query["site"] = site
         return True
+
+    async def sync_master_to_inventory(self) -> None:
+        """Ensure all materials defined in Inventory Master exist in Stock Tracking (self.inventory)."""
+        try:
+            site_names = []
+            cursor = self.sites.find({})
+            async for s in cursor:
+                s_name = s.get("name")
+                if s_name and s_name not in site_names:
+                    site_names.append(s_name)
+            if not site_names:
+                site_names = ["Site A"]
+
+            master_cursor = self.inventory_master.find({})
+            async for m in master_cursor:
+                mat_name = (m.get("material") or "").strip()
+                if not mat_name:
+                    continue
+                cat = m.get("category") or "Others"
+                unit = m.get("measurement") or "Units"
+                init_stock = float(m.get("initialStock", 0.0) or 0.0)
+                min_s = float(m.get("minStock", 10.0) or 10.0)
+                target_sites = [m.get("site")] if m.get("site") and m.get("site") != "All Sites" else site_names
+
+                for s_name in target_sites:
+                    existing = await self.inventory.find_one({
+                        "name": {"$regex": f"^{re.escape(mat_name)}$", "$options": "i"},
+                        "$or": [{"site": s_name}, {"site": "All Sites"}]
+                    })
+                    if not existing:
+                        inv_id = f"inv-{uuid.uuid4().hex[:6]}"
+                        await self.inventory.insert_one({
+                            "id": inv_id,
+                            "_id": inv_id,
+                            "name": mat_name,
+                            "category": cat,
+                            "unit": unit,
+                            "totalStock": init_stock,
+                            "minStock": min_s,
+                            "status": _calc_stock_status(init_stock, min_s),
+                            "site": s_name,
+                            "unitPrice": 0.0,
+                            "createdAt": datetime.now(timezone.utc).isoformat(),
+                            "updatedAt": datetime.now(timezone.utc).isoformat(),
+                        })
+        except Exception as e:
+            logger.warning(f"Error syncing master to inventory: {e}")
 
     async def list_inventory(
         self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
     ) -> List[InventoryResponse]:
+        await self.sync_master_to_inventory()
         query: Dict[str, Any] = {}
         if not self._apply_site_filter(query, site, allowed_sites):
             return []
@@ -357,22 +436,30 @@ class ConstructionService:
     async def get_low_stock(
         self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        query: Dict[str, Any] = {"status": {"$in": ["Low", "Out of Stock"]}}
+        query: Dict[str, Any] = {
+            "$or": [
+                {"status": {"$in": ["Low", "Out of Stock"]}},
+                {"$expr": {"$lte": ["$totalStock", "$minStock"]}},
+            ]
+        }
         if not self._apply_site_filter(query, site, allowed_sites):
             return []
 
         cursor = self.inventory.find(query)
         alerts = []
         async for doc in cursor:
+            curr = doc.get("totalStock", 0)
+            reorder = doc.get("minStock", 100)
+            unit = doc.get("unit", "Units")
             alerts.append({
                 "id": f"alert-{doc.get('id', doc.get('_id'))}",
-                "material": doc["name"],
-                "site": doc["site"],
-                "currentStock": doc["totalStock"],
-                "reorderLevel": doc["minStock"],
-                "unit": doc["unit"],
-                "status": "Critical" if doc["status"] == "Out of Stock" else "Low",
-                "recommendation": f"Order {int(doc['minStock'] * 2 - doc['totalStock'])} {doc['unit']} immediately",
+                "material": doc.get("name", "Unknown Material"),
+                "site": doc.get("site", "Main Project Site"),
+                "currentStock": curr,
+                "reorderLevel": reorder,
+                "unit": unit,
+                "status": "Critical" if doc.get("status") == "Out of Stock" or curr <= 0 else "Low",
+                "recommendation": f"Order {int(max(reorder * 2 - curr, 10))} {unit} immediately",
             })
         return alerts
 
@@ -563,6 +650,185 @@ class ConstructionService:
             return MaterialRequestResponse(**self._doc_to_res(res))
         return None
 
+    async def send_materials_to_supervisor(
+        self,
+        request_id: str,
+        dispatched_qty: Optional[float] = None,
+        dispatch_notes: Optional[str] = None,
+        supplier_or_store: Optional[str] = "Central Warehouse / Admin",
+        admin_name: str = "Admin",
+        add_stock_qty: Optional[float] = None,
+        supplier: Optional[str] = None,
+        invoice_no: Optional[str] = None,
+        unit_price: Optional[float] = None,
+    ) -> Optional[MaterialRequestResponse]:
+        req = await self.requests.find_one(
+            {"$or": [{"id": request_id}, {"_id": request_id}, {"requestId": request_id}]}
+        )
+        if not req:
+            return None
+
+        qty = float(dispatched_qty) if (dispatched_qty is not None and dispatched_qty > 0) else float(req.get("quantity") or 0.0)
+        site_name = req.get("site") or "Site A"
+        material_name = (req.get("material") or "").strip()
+        unit = req.get("unit") or "Units"
+        now_str = datetime.now(timezone.utc).strftime("%d %b %Y, %I:%M %p")
+        today_date = datetime.now(timezone.utc).strftime("%d-%m-%Y")
+        req_id_str = req.get("requestId", request_id)
+        notes = (dispatch_notes or f"Dispatched by {admin_name} against request {req_id_str}").strip()
+
+        # Step 0: If we don't have stock or need to add stock first, restock Central Warehouse
+        if add_stock_qty is not None and float(add_stock_qty) > 0:
+            stock_to_add = float(add_stock_qty)
+            central_item = await self.inventory.find_one({
+                "name": {"$regex": f"^{re.escape(material_name)}$", "$options": "i"},
+                "$or": [{"site": "Central Warehouse"}, {"site": "Central Store"}, {"site": "All Sites"}]
+            })
+            if central_item:
+                new_central = float(central_item.get("totalStock", 0.0)) + stock_to_add
+                min_s = float(central_item.get("minStock", 10.0))
+                await self.inventory.update_one(
+                    {"_id": central_item["_id"]},
+                    {
+                        "$set": {
+                            "totalStock": new_central,
+                            "status": _calc_stock_status(new_central, min_s),
+                            "unitPrice": unit_price if unit_price is not None else central_item.get("unitPrice", 0.0),
+                            "updatedAt": datetime.now(timezone.utc).isoformat(),
+                        }
+                    }
+                )
+            else:
+                new_inv_id = f"inv-{uuid.uuid4().hex[:6]}"
+                await self.inventory.insert_one({
+                    "id": new_inv_id,
+                    "_id": new_inv_id,
+                    "name": material_name,
+                    "category": "Others",
+                    "unit": unit,
+                    "totalStock": stock_to_add,
+                    "minStock": 10.0,
+                    "status": _calc_stock_status(stock_to_add, 10.0),
+                    "site": "Central Warehouse",
+                    "unitPrice": unit_price or 0.0,
+                    "createdAt": now_str,
+                    "updatedAt": datetime.now(timezone.utc).isoformat(),
+                })
+
+            # Record stock_in transaction for Central Warehouse restock
+            await self.stock_transactions.insert_one({
+                "id": f"tx-in-{uuid.uuid4().hex[:6]}",
+                "site": "Central Warehouse",
+                "material": material_name,
+                "quantity": stock_to_add,
+                "unit": unit,
+                "type": "stock_in",
+                "reference": invoice_no or f"Procured for Req {req_id_str}",
+                "actor": supplier or "Vendor / Supplier",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "notes": f"Procured and added stock for material request {req_id_str}",
+            })
+
+        # Deduct dispatched quantity from Central Warehouse inventory if present
+        central_item_after = await self.inventory.find_one({
+            "name": {"$regex": f"^{re.escape(material_name)}$", "$options": "i"},
+            "$or": [{"site": "Central Warehouse"}, {"site": "Central Store"}, {"site": "All Sites"}]
+        })
+        if central_item_after:
+            cur_c_stock = float(central_item_after.get("totalStock", 0.0))
+            rem_stock = max(0.0, cur_c_stock - qty)
+            min_s = float(central_item_after.get("minStock", 10.0))
+            await self.inventory.update_one(
+                {"_id": central_item_after["_id"]},
+                {
+                    "$set": {
+                        "totalStock": rem_stock,
+                        "status": _calc_stock_status(rem_stock, min_s),
+                        "updatedAt": datetime.now(timezone.utc).isoformat(),
+                    }
+                }
+            )
+
+        # 1. Update the Material Request status and record dispatch details
+        updated_req = await self.requests.find_one_and_update(
+            {"_id": req["_id"]},
+            {
+                "$set": {
+                    "status": "Approved",
+                    "dispatchedQty": qty,
+                    "dispatchedOn": now_str,
+                    "dispatchedBy": admin_name,
+                    "dispatchNotes": notes,
+                    "updatedAt": datetime.now(timezone.utc).isoformat(),
+                }
+            },
+            return_document=True,
+        )
+
+        # 2. Record Material Outward entry for Admin (so it appears on Material Outward Page)
+        outw_id = f"outw-{uuid.uuid4().hex[:6]}"
+        outward_doc = {
+            "id": outw_id,
+            "_id": outw_id,
+            "outwardId": f"OUT-{uuid.uuid4().hex[:6].upper()}",
+            "date": today_date,
+            "site": site_name,
+            "project": site_name,
+            "material": material_name,
+            "natureOfWork": f"Material Request ({req_id_str}) - {req.get('purpose') or 'Dispatched to Supervisor'}",
+            "quantity": qty,
+            "measurement": unit,
+            "createdOn": datetime.now().strftime("%d-%m-%Y %H:%M"),
+            "requestedBy": req.get("requestedBy", "Site Supervisor"),
+            "authorizedBy": admin_name,
+            "notes": notes,
+        }
+        await self.material_outward.insert_one(outward_doc)
+
+        # 3. Record stock_out in transactions ledger for Admin outward dispatch
+        await self.stock_transactions.insert_one({
+            "id": f"tx-{uuid.uuid4().hex[:6]}",
+            "site": site_name,
+            "material": material_name,
+            "quantity": qty,
+            "unit": unit,
+            "type": "stock_out",
+            "reference": req_id_str,
+            "actor": admin_name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "notes": f"Admin outward dispatch: {qty} {unit} of {material_name} for supervisor request {req_id_str}",
+        })
+
+        # 4. Record delivery as In Transit / Dispatched to the supervisor's site
+        deliv_count = await self.deliveries.count_documents({})
+        deliv_id = f"DEL-2025-{deliv_count + 101:03d}"
+        await self.deliveries.insert_one({
+            "id": f"del-{uuid.uuid4().hex[:6]}",
+            "deliveryId": deliv_id,
+            "supplier": supplier_or_store or "Central Store / Admin",
+            "site": site_name,
+            "material": material_name,
+            "expectedQty": qty,
+            "receivedQty": 0,
+            "unit": unit,
+            "status": "In Transit",
+            "expectedDate": datetime.now(timezone.utc).strftime("%d %b %Y"),
+            "receivedBy": req.get("requestedBy", "Site Supervisor"),
+        })
+
+        # 5. Log activity for both Supervisor and Admin
+        await self.log_activity(
+            text=f"Material Outward: {qty} {unit} of {material_name} dispatched to Supervisor",
+            subtext=f"Site: {site_name} | Ref: {req_id_str} | Dispatched by: {admin_name}",
+            site=site_name,
+            act_type="stock_out",
+            actor=admin_name,
+            target_role="supervisor",
+        )
+
+        await self._persist()
+        return MaterialRequestResponse(**self._doc_to_res(updated_req))
+
     async def delete_request(self, request_id: str) -> bool:
         res = await self.requests.delete_one(
             {"$or": [{"id": request_id}, {"_id": request_id}, {"requestId": request_id}]}
@@ -686,11 +952,20 @@ class ConstructionService:
     # -----------------------------------------------------------------------
     # Activities & Dashboard Summary
     # -----------------------------------------------------------------------
-    async def log_activity(self, text: str, site: str, act_type: str, subtext: Optional[str] = None) -> None:
+    async def log_activity(
+        self,
+        text: str,
+        site: str,
+        act_type: str = "request",
+        subtext: Optional[str] = None,
+        actor: Optional[str] = None,
+        target_role: Optional[str] = None,
+        words: Optional[str] = None,
+    ) -> Dict[str, Any]:
         try:
             act_id = f"act-{uuid.uuid4().hex[:6]}"
             now_str = datetime.now(timezone.utc).strftime("%d %b, %I:%M %p")
-            await self.activities.insert_one({
+            doc = {
                 "_id": act_id,
                 "id": act_id,
                 "text": text,
@@ -698,19 +973,39 @@ class ConstructionService:
                 "site": site,
                 "time": now_str,
                 "type": act_type,
-            })
+                "actor": actor or ("Admin" if target_role == "supervisor" else "Supervisor"),
+                "targetRole": target_role or "all",
+                "words": words,
+                "status": "unread",
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.activities.insert_one(doc)
+            return self._doc_to_res(doc)
         except Exception as exc:
             logger.warning("Could not log activity: %s", exc)
+            return {}
 
     async def list_activities(
         self,
         site: Optional[str] = None,
-        limit: int = 20,
+        limit: int = 50,
         allowed_sites: Optional[List[str]] = None,
+        role: Optional[str] = None,
     ) -> List[ActivityResponse]:
-        query = {}
+        query: Dict[str, Any] = {}
         if not self._apply_site_filter(query, site, allowed_sites):
             return []
+
+        if role == "supervisor":
+            query["$or"] = [
+                {"targetRole": {"$in": ["supervisor", "all"]}},
+                {"actor": "Admin"},
+            ]
+        elif role == "admin":
+            query["$or"] = [
+                {"targetRole": {"$in": ["admin", "all"]}},
+                {"actor": {"$in": ["Supervisor", "Site Supervisor", "Admin"]}},
+            ]
 
         cursor = self.activities.find(query).sort("_id", -1).limit(limit)
         items = []
@@ -844,31 +1139,77 @@ class ConstructionService:
             }
 
         elif clean_type in ("material-movement", "inward-outward", "movement"):
-            acts = await self.list_activities(site, limit=500, allowed_sites=allowed_sites)
             headers = [
-                "Timestamp",
+                "Date",
                 "Transaction Type",
-                "Material Item",
+                "Material Item / Work",
                 "Site",
-                "Action Details",
-                "User / Authority",
+                "Quantity & Unit",
+                "Transaction Details",
+                "Authority",
             ]
             rows = []
             stock_in_count = 0
             stock_out_count = 0
-            for act in acts:
-                if act.type == "stock_in":
+
+            # 1. Real Inward material records
+            inw_query: Dict[str, Any] = {}
+            if site and site != "All Sites":
+                inw_query["$or"] = [{"site": site}, {"project": site}]
+            inw_cursor = self.material_inward.find(inw_query).sort("createdOn", -1)
+            async for item in inw_cursor:
+                stock_in_count += 1
+                rows.append([
+                    item.get("date") or item.get("createdOn", ""),
+                    "Material Inward",
+                    item.get("material", "N/A"),
+                    item.get("site") or item.get("project", "Site A"),
+                    f"{item.get('quantity', 0)} {item.get('measurement', 'Units')}",
+                    f"Entry: {item.get('entryCode', '')} | Valuation: ₹{item.get('totalValue', 0)}",
+                    "Supervisor",
+                ])
+
+            # 2. Real Outward material records
+            out_query: Dict[str, Any] = {}
+            if site and site != "All Sites":
+                out_query["$or"] = [{"site": site}, {"project": site}]
+            out_cursor = self.material_outward.find(out_query).sort("createdOn", -1)
+            async for item in out_cursor:
+                stock_out_count += 1
+                rows.append([
+                    item.get("date") or item.get("createdOn", ""),
+                    "Material Outward",
+                    item.get("natureOfWork", "Dispatched"),
+                    item.get("site") or item.get("project", "Site A"),
+                    f"{item.get('quantity', 0)} {item.get('measurement', 'Units')}",
+                    f"Project: {item.get('project', '')} | Work: {item.get('natureOfWork', '')}",
+                    "Supervisor",
+                ])
+
+            # 3. Stock transactions
+            tx_query: Dict[str, Any] = {}
+            if site and site != "All Sites":
+                tx_query["site"] = site
+            tx_cursor = self.stock_transactions.find(tx_query).sort("timestamp", -1)
+            async for tx in tx_cursor:
+                ref = tx.get("reference", "")
+                if ref and any(ref in r[5] for r in rows):
+                    continue
+                tx_type = "Stock In" if tx.get("type") == "stock_in" else "Stock Out"
+                if tx.get("type") == "stock_in":
                     stock_in_count += 1
-                elif act.type == "stock_out":
+                else:
                     stock_out_count += 1
                 rows.append([
-                    act.timestamp or "",
-                    "Stock In" if act.type == "stock_in" else "Stock Out" if act.type == "stock_out" else act.type,
-                    act.material or "N/A",
-                    act.site or "N/A",
-                    act.text or "",
-                    act.user or "Site Engineer",
+                    (tx.get("timestamp", "") or "")[:10],
+                    tx_type,
+                    tx.get("material", ""),
+                    tx.get("site", ""),
+                    f"{tx.get('quantity', 0)} {tx.get('unit', '')}",
+                    tx.get("notes") or ref,
+                    tx.get("actor", "Supervisor"),
                 ])
+
             return {
                 "reportType": "material-movement",
                 "title": "Material Inward & Outward Movement Audit",
@@ -877,7 +1218,7 @@ class ConstructionService:
                 "headers": headers,
                 "rows": rows,
                 "summary": {
-                    "totalTransactions": len(acts),
+                    "totalTransactions": len(rows),
                     "stockInCount": stock_in_count,
                     "stockOutCount": stock_out_count,
                 },
@@ -1082,3 +1423,609 @@ class ConstructionService:
             writer.writerow([k, str(v)])
 
         return output.getvalue()
+
+    # -----------------------------------------------------------------------
+    # Key Screens: 1 & 2. Project Master
+    # -----------------------------------------------------------------------
+    async def list_projects_master(self) -> List[Dict[str, Any]]:
+        cursor = self.projects_master.find({})
+        docs = await cursor.to_list(length=200)
+        return [self._doc_to_res(d) for d in docs]
+
+    async def create_project_master(self, data: ProjectMasterCreate) -> Dict[str, Any]:
+        item_dict = data.model_dump()
+        item_dict["id"] = f"proj-{uuid.uuid4().hex[:6]}"
+        item_dict["createdOn"] = datetime.now().strftime("%d-%m-%Y")
+        if not item_dict.get("status"):
+            item_dict["status"] = "Active"
+        await self.projects_master.insert_one(item_dict)
+
+        # Synchronize with sites collection for system-wide recognition
+        site_name = (item_dict.get("siteName") or "").strip()
+        project_name = (item_dict.get("projectName") or "").strip()
+        if site_name:
+            existing = await self.sites.find_one({"name": site_name})
+            if not existing:
+                site_code = f"PRJ-{project_name[:3].upper() if len(project_name) >= 3 else 'STE'}-{uuid.uuid4().hex[:3].upper()}"
+                await self.sites.insert_one({
+                    "id": f"site-{uuid.uuid4().hex[:6]}",
+                    "name": site_name,
+                    "code": site_code,
+                    "location": f"{site_name}, {project_name}",
+                    "projectType": project_name,
+                    "status": "Active",
+                    "totalMaterials": 0,
+                    "lowStockCount": 0,
+                    "stockValue": 0.0,
+                    "stockValueFormatted": "₹0",
+                    "createdAt": datetime.now(timezone.utc).isoformat(),
+                })
+        await self.log_activity(
+            text=f"Project Setup: {project_name} - {site_name}",
+            subtext=f"Status: {item_dict.get('status', 'Active')}",
+            site=site_name,
+            act_type="delivery",
+            actor="Admin",
+            target_role="supervisor",
+        )
+        await self._persist()
+        return self._doc_to_res(item_dict)
+
+    async def update_project_master(self, project_id: str, data: ProjectMasterUpdate) -> Optional[Dict[str, Any]]:
+        update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+        if not update_data:
+            doc = await self.projects_master.find_one({"$or": [{"id": project_id}, {"_id": project_id}]})
+            return self._doc_to_res(doc)
+        await self.projects_master.update_one({"$or": [{"id": project_id}, {"_id": project_id}]}, {"$set": update_data})
+        await self._persist()
+        doc = await self.projects_master.find_one({"$or": [{"id": project_id}, {"_id": project_id}]})
+        return self._doc_to_res(doc)
+
+    async def delete_project_master(self, project_id: str) -> bool:
+        res = await self.projects_master.delete_one({"$or": [{"id": project_id}, {"_id": project_id}]})
+        await self._persist()
+        return res.deleted_count > 0
+
+    # -----------------------------------------------------------------------
+    # Key Screens: 3. Supervisor Master
+    # -----------------------------------------------------------------------
+    async def list_supervisors_master(self) -> List[Dict[str, Any]]:
+        cursor = self.supervisors_master.find({})
+        docs = await cursor.to_list(length=200)
+        return [self._doc_to_res(d) for d in docs]
+
+    async def create_supervisor_master(self, data: SupervisorMasterCreate) -> Dict[str, Any]:
+        item_dict = data.model_dump()
+        item_dict["id"] = f"sup-{uuid.uuid4().hex[:6]}"
+        item_dict["createdOn"] = datetime.now().strftime("%d-%m-%Y")
+        await self.supervisors_master.insert_one(item_dict)
+
+        # 1. Automatic User Account Creation / Sync in db["users"]
+        raw_login = data.loginId.strip().lower()
+        email_clean = raw_login if "@" in raw_login else f"{raw_login}@anandhomes.com"
+        from app.core.security import hash_password
+
+        # Check if user already exists
+        existing_user = await self.db["users"].find_one({
+            "$or": [
+                {"email": email_clean},
+                {"login_id": raw_login},
+                {"username": raw_login},
+            ]
+        })
+        user_id = str(uuid.uuid4())
+        pwd_hash = hash_password(data.password)
+
+        if not existing_user:
+            user_doc = {
+                "_id": user_id,
+                "id": user_id,
+                "name": data.name.strip(),
+                "email": email_clean,
+                "login_id": raw_login,
+                "password_hash": pwd_hash,
+                "role": "supervisor",
+                "assigned_site": data.site,
+                "assigned_project": data.project,
+                "is_active": True,
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+            }
+            await self.db["users"].insert_one(user_doc)
+        else:
+            user_id = str(existing_user.get("id") or existing_user.get("_id"))
+            await self.db["users"].update_one(
+                {"$or": [{"_id": user_id}, {"id": user_id}]},
+                {"$set": {
+                    "name": data.name.strip(),
+                    "password_hash": pwd_hash,
+                    "role": "supervisor",
+                    "assigned_site": data.site,
+                    "assigned_project": data.project,
+                    "is_active": True,
+                    "updated_at": datetime.now(timezone.utc),
+                }}
+            )
+
+        # 2. Assign Site to Supervisor in db["sites"]
+        site_doc = await self.sites.find_one({"name": data.site})
+        if site_doc:
+            await self.sites.update_one(
+                {"_id": site_doc["_id"]},
+                {"$set": {
+                    "supervisor": data.name.strip(),
+                    "supervisorEmail": email_clean,
+                    "supervisorId": user_id,
+                    "project": data.project,
+                }}
+            )
+        else:
+            new_site_doc = {
+                "_id": f"site-{uuid.uuid4().hex[:6]}",
+                "id": f"site-{uuid.uuid4().hex[:6]}",
+                "name": data.site,
+                "code": f"SITE-{uuid.uuid4().hex[:4].upper()}",
+                "location": data.project or "On-Site",
+                "status": "Active",
+                "supervisor": data.name.strip(),
+                "supervisorEmail": email_clean,
+                "supervisorId": user_id,
+                "project": data.project,
+                "stockValue": 0,
+                "stockValueFormatted": "₹0",
+                "totalMaterials": 0,
+                "pendingRequests": 0,
+                "lastDelivery": "No deliveries yet",
+                "lastUpdated": datetime.now().strftime("%d %b %Y"),
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.sites.insert_one(new_site_doc)
+
+        # 3. Log Activity / Notification for both Admin & Supervisor
+        await self.log_activity(
+            text=f"Supervisor Assigned: {data.name} assigned to Site '{data.site}'",
+            subtext=f"Project: {data.project} | Login ID: {data.loginId} | Role: Site Supervisor",
+            site=data.site,
+            act_type="request",
+            actor="Admin",
+            target_role="supervisor",
+        )
+
+        await self._persist()
+        return self._doc_to_res(item_dict)
+
+    async def update_supervisor_master(self, supervisor_id: str, data: SupervisorMasterUpdate) -> Optional[Dict[str, Any]]:
+        update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+        if not update_data:
+            doc = await self.supervisors_master.find_one({"$or": [{"id": supervisor_id}, {"_id": supervisor_id}]})
+            return self._doc_to_res(doc)
+        await self.supervisors_master.update_one({"$or": [{"id": supervisor_id}, {"_id": supervisor_id}]}, {"$set": update_data})
+
+        # Sync updates with users collection & site assignment if name/site/password changed
+        doc = await self.supervisors_master.find_one({"$or": [{"id": supervisor_id}, {"_id": supervisor_id}]})
+        if doc:
+            user_update: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
+            if "name" in update_data:
+                user_update["name"] = update_data["name"]
+            if "site" in update_data:
+                user_update["assigned_site"] = update_data["site"]
+                # Update site supervisor
+                await self.sites.update_one({"name": update_data["site"]}, {"$set": {"supervisor": doc.get("name")}})
+            if "project" in update_data:
+                user_update["assigned_project"] = update_data["project"]
+            if "password" in update_data and update_data["password"]:
+                from app.core.security import hash_password
+                user_update["password_hash"] = hash_password(update_data["password"])
+
+            raw_login = doc.get("loginId", "").strip().lower()
+            email_clean = raw_login if "@" in raw_login else f"{raw_login}@anandhomes.com"
+            await self.db["users"].update_one(
+                {"$or": [{"email": email_clean}, {"login_id": raw_login}]},
+                {"$set": user_update}
+            )
+
+            await self.log_activity(
+                text=f"Supervisor Updated: {doc.get('name')} for Site '{doc.get('site')}'",
+                subtext=f"Project: {doc.get('project')}",
+                site=doc.get("site", "All Sites"),
+                act_type="request",
+                actor="Admin",
+                target_role="supervisor",
+            )
+
+        await self._persist()
+        return self._doc_to_res(doc)
+
+    async def delete_supervisor_master(self, supervisor_id: str) -> bool:
+        doc = await self.supervisors_master.find_one({"$or": [{"id": supervisor_id}, {"_id": supervisor_id}]})
+        if doc:
+            raw_login = doc.get("loginId", "").strip().lower()
+            email_clean = raw_login if "@" in raw_login else f"{raw_login}@anandhomes.com"
+            await self.db["users"].delete_one({"$or": [{"email": email_clean}, {"login_id": raw_login}]})
+            if doc.get("site"):
+                await self.sites.update_one({"name": doc.get("site")}, {"$set": {"supervisor": "Unassigned"}})
+        res = await self.supervisors_master.delete_one({"$or": [{"id": supervisor_id}, {"_id": supervisor_id}]})
+        await self._persist()
+        return res.deleted_count > 0
+
+    # -----------------------------------------------------------------------
+    # Key Screens: 4. Project Duration
+    # -----------------------------------------------------------------------
+    async def list_project_durations(self) -> List[Dict[str, Any]]:
+        cursor = self.project_durations.find({})
+        docs = await cursor.to_list(length=200)
+        return [self._doc_to_res(d) for d in docs]
+
+    async def create_project_duration(self, data: ProjectDurationCreate) -> Dict[str, Any]:
+        item_dict = data.model_dump()
+        item_dict["id"] = f"dur-{uuid.uuid4().hex[:6]}"
+        item_dict["createdOn"] = datetime.now().strftime("%d-%m-%Y")
+        await self.project_durations.insert_one(item_dict)
+        await self._persist()
+        return self._doc_to_res(item_dict)
+
+    async def delete_project_duration(self, duration_id: str) -> bool:
+        res = await self.project_durations.delete_one({"$or": [{"id": duration_id}, {"_id": duration_id}]})
+        await self._persist()
+        return res.deleted_count > 0
+
+    # -----------------------------------------------------------------------
+    # Key Screens: 5. Inventory Master
+    # -----------------------------------------------------------------------
+    async def list_inventory_master(self) -> List[Dict[str, Any]]:
+        cursor = self.inventory_master.find({})
+        docs = await cursor.to_list(length=200)
+        return [self._doc_to_res(d) for d in docs]
+
+    async def create_inventory_master(self, data: InventoryMasterCreate) -> Dict[str, Any]:
+        item_dict = data.model_dump()
+        item_dict["id"] = f"im-{uuid.uuid4().hex[:6]}"
+        item_dict["createdOn"] = datetime.now().strftime("%d-%m-%Y")
+        await self.inventory_master.insert_one(item_dict)
+
+        # Synchronize / register directly into stock tracking (self.inventory)
+        mat_name = (data.material or "").strip()
+        category = data.category or "Others"
+        unit = data.measurement or "Units"
+        init_stock = float(data.initialStock or 0.0)
+        min_stock = float(data.minStock or 10.0)
+
+        site_names = []
+        if data.site and data.site.strip() and data.site != "All Sites":
+            site_names = [data.site.strip()]
+        else:
+            cursor = self.sites.find({})
+            async for s in cursor:
+                s_name = s.get("name")
+                if s_name and s_name not in site_names:
+                    site_names.append(s_name)
+            if not site_names:
+                site_names = ["Site A"]
+
+        for s_name in site_names:
+            existing = await self.inventory.find_one({
+                "name": {"$regex": f"^{re.escape(mat_name)}$", "$options": "i"},
+                "$or": [{"site": s_name}, {"site": "All Sites"}]
+            })
+            if existing:
+                if init_stock > 0:
+                    new_tot = float(existing.get("totalStock", 0.0)) + init_stock
+                    await self.inventory.update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": {
+                            "totalStock": new_tot,
+                            "status": _calc_stock_status(new_tot, float(existing.get("minStock", min_stock))),
+                            "unit": unit,
+                            "category": category,
+                            "updatedAt": datetime.now(timezone.utc).isoformat(),
+                        }}
+                    )
+            else:
+                inv_id = f"inv-{uuid.uuid4().hex[:6]}"
+                inv_doc = {
+                    "id": inv_id,
+                    "_id": inv_id,
+                    "name": mat_name,
+                    "category": category,
+                    "unit": unit,
+                    "totalStock": init_stock,
+                    "minStock": min_stock,
+                    "status": _calc_stock_status(init_stock, min_stock),
+                    "site": s_name,
+                    "unitPrice": 0.0,
+                    "createdAt": datetime.now(timezone.utc).isoformat(),
+                    "updatedAt": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.inventory.insert_one(inv_doc)
+
+        await self._persist()
+        return self._doc_to_res(item_dict)
+
+    async def update_inventory_master(self, item_id: str, data: InventoryMasterUpdate) -> Optional[Dict[str, Any]]:
+        old_doc = await self.inventory_master.find_one({"$or": [{"id": item_id}, {"_id": item_id}]})
+        old_name = (old_doc.get("material") or "").strip() if old_doc else None
+
+        update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+        if not update_data:
+            return self._doc_to_res(old_doc)
+
+        await self.inventory_master.update_one({"$or": [{"id": item_id}, {"_id": item_id}]}, {"$set": update_data})
+
+        # Update stock tracking items if name/category/unit changed
+        if old_name:
+            sync_fields: Dict[str, Any] = {}
+            if data.material:
+                sync_fields["name"] = data.material.strip()
+            if data.category:
+                sync_fields["category"] = data.category
+            if data.measurement:
+                sync_fields["unit"] = data.measurement
+            if sync_fields:
+                sync_fields["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                await self.inventory.update_many(
+                    {"name": {"$regex": f"^{re.escape(old_name)}$", "$options": "i"}},
+                    {"$set": sync_fields}
+                )
+
+        await self._persist()
+        doc = await self.inventory_master.find_one({"$or": [{"id": item_id}, {"_id": item_id}]})
+        return self._doc_to_res(doc)
+
+    async def delete_inventory_master(self, item_id: str) -> bool:
+        doc = await self.inventory_master.find_one({"$or": [{"id": item_id}, {"_id": item_id}]})
+        if doc and doc.get("material"):
+            mat_name = doc["material"].strip()
+            # If stock is 0, also remove unstocked tracking items
+            await self.inventory.delete_many({
+                "name": {"$regex": f"^{re.escape(mat_name)}$", "$options": "i"},
+                "totalStock": {"$lte": 0}
+            })
+        res = await self.inventory_master.delete_one({"$or": [{"id": item_id}, {"_id": item_id}]})
+        await self._persist()
+        return res.deleted_count > 0
+
+    # -----------------------------------------------------------------------
+    # Key Screens: 6. Inward Material Entry (Common)
+    # -----------------------------------------------------------------------
+    async def list_inward_materials(
+        self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        query: Dict[str, Any] = {}
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
+        cursor = self.material_inward.find(query).sort("createdOn", -1)
+        docs = await cursor.to_list(length=500)
+        return [self._doc_to_res(d) for d in docs]
+
+    async def create_inward_material(self, data: InwardMaterialCreate) -> Dict[str, Any]:
+        item_dict = data.model_dump()
+        item_dict["id"] = f"inw-{uuid.uuid4().hex[:6]}"
+        # Generate unique entry code as specified in diagram: e.g. INW-YYYYMMDD-XXXX
+        today_str = datetime.now().strftime("%Y%m%d")
+        suffix = uuid.uuid4().hex[:4].upper()
+        item_dict["entryCode"] = f"INW-{today_str}-{suffix}"
+        
+        # Calculate auto unit price: totalValue / quantity
+        qty = float(item_dict.get("quantity") or 1.0)
+        total_val = float(item_dict.get("totalValue") or 0.0)
+        unit_price = round(total_val / qty, 2) if qty > 0 else 0.0
+        item_dict["unitPrice"] = unit_price
+        item_dict["createdOn"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+
+        await self.material_inward.insert_one(item_dict)
+
+        # Ensure material is added or updated directly in inventory collection
+        site_name = item_dict.get("site") or item_dict.get("project") or "Site A"
+        mat_name = (item_dict.get("material") or "").strip()
+        category = item_dict.get("category") or "Others"
+        unit = item_dict.get("measurement") or "Units"
+
+        existing_item = await self.inventory.find_one({
+            "name": {"$regex": f"^{re.escape(mat_name)}$", "$options": "i"},
+            "$or": [{"site": site_name}, {"site": "All Sites"}, {"site": {"$exists": False}}]
+        })
+
+        if existing_item:
+            new_stock = float(existing_item.get("totalStock", 0)) + qty
+            min_s = float(existing_item.get("minStock", 10.0))
+            await self.inventory.update_one(
+                {"_id": existing_item["_id"]},
+                {
+                    "$set": {
+                        "totalStock": new_stock,
+                        "status": _calc_stock_status(new_stock, min_s),
+                        "unit": unit or existing_item.get("unit", "Units"),
+                        "category": category or existing_item.get("category", "Others"),
+                        "unitPrice": unit_price or existing_item.get("unitPrice", 0.0),
+                        "site": site_name,
+                        "updatedAt": datetime.now(timezone.utc).isoformat(),
+                    }
+                }
+            )
+        else:
+            inv_id = f"inv-{uuid.uuid4().hex[:6]}"
+            inv_doc = {
+                "id": inv_id,
+                "_id": inv_id,
+                "name": mat_name,
+                "category": category,
+                "unit": unit,
+                "totalStock": qty,
+                "minStock": 10.0,
+                "status": _calc_stock_status(qty, 10.0),
+                "site": site_name,
+                "unitPrice": unit_price,
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.inventory.insert_one(inv_doc)
+
+        # Record in stock_transactions audit ledger
+        await self.stock_transactions.insert_one({
+            "id": f"tx-{uuid.uuid4().hex[:6]}",
+            "site": site_name,
+            "material": mat_name,
+            "quantity": qty,
+            "unit": unit,
+            "type": "stock_in",
+            "reference": item_dict.get("entryCode"),
+            "actor": "Supervisor",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "notes": f"Material Inward Entry: {item_dict.get('entryCode')}",
+            "unitPrice": unit_price,
+            "totalValue": total_val,
+        })
+
+        # Recalculate site totalMaterials and stockValue
+        site_inv = await self.inventory.find({"site": site_name}).to_list(length=300)
+        total_mats = len(site_inv)
+        site_val = sum(float(i.get("totalStock", 0)) * float(i.get("unitPrice", 0) or 250) for i in site_inv)
+        await self.sites.update_one(
+            {"$or": [{"name": site_name}, {"id": site_name}]},
+            {"$set": {
+                "totalMaterials": total_mats,
+                "stockValue": site_val,
+                "stockValueFormatted": _format_inr(site_val),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+            }}
+        )
+
+        site_display = site_name or "On-Site"
+        # Log Activity to Admin
+        await self.log_activity(
+            text=f"Material Inward: Received {qty} of {item_dict.get('material')} at {site_display}",
+            subtext=f"Entry Code: {item_dict.get('entryCode')} | Total Value: ₹{total_val}",
+            site=site_display,
+            act_type="stock_in",
+            actor="Supervisor",
+            target_role="admin",
+        )
+
+        await self._persist()
+        return self._doc_to_res(item_dict)
+
+    # -----------------------------------------------------------------------
+    # Key Screens: 7. Outward Material Entry
+    # -----------------------------------------------------------------------
+    async def list_outward_materials(
+        self, site: Optional[str] = None, allowed_sites: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        query: Dict[str, Any] = {}
+        if not self._apply_site_filter(query, site, allowed_sites):
+            return []
+        cursor = self.material_outward.find(query).sort("createdOn", -1)
+        docs = await cursor.to_list(length=500)
+        return [self._doc_to_res(d) for d in docs]
+
+    async def create_outward_material(self, data: OutwardMaterialCreate) -> Dict[str, Any]:
+        item_dict = data.model_dump()
+        item_dict["id"] = f"outw-{uuid.uuid4().hex[:6]}"
+        item_dict["outwardId"] = item_dict.get("outwardId") or f"OUT-{uuid.uuid4().hex[:6].upper()}"
+        item_dict["createdOn"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+        qty = float(item_dict.get("quantity") or 0.0)
+        site_name = item_dict.get("site") or item_dict.get("project") or "Site A"
+        work_or_mat = (item_dict.get("material") or item_dict.get("natureOfWork") or "").strip()
+        if not item_dict.get("natureOfWork"):
+            item_dict["natureOfWork"] = work_or_mat
+        if not item_dict.get("material"):
+            item_dict["material"] = work_or_mat
+        if not item_dict.get("measurement") and item_dict.get("unit"):
+            item_dict["measurement"] = item_dict["unit"]
+
+        await self.material_outward.insert_one(item_dict)
+
+        # Decrement stock in inventory if matching material item found
+        inv_match = await self.inventory.find_one({
+            "$and": [
+                {
+                    "$or": [
+                        {"name": {"$regex": f"^{re.escape(work_or_mat)}$", "$options": "i"}},
+                        {"category": {"$regex": f"^{re.escape(work_or_mat)}$", "$options": "i"}},
+                    ]
+                },
+                {
+                    "$or": [{"site": site_name}, {"site": "All Sites"}]
+                }
+            ]
+        })
+        if inv_match:
+            cur_stock = float(inv_match.get("totalStock", 0))
+            new_stock = max(0.0, cur_stock - qty)
+            min_s = float(inv_match.get("minStock", 10.0))
+            await self.inventory.update_one(
+                {"_id": inv_match["_id"]},
+                {
+                    "$set": {
+                        "totalStock": new_stock,
+                        "status": _calc_stock_status(new_stock, min_s),
+                        "updatedAt": datetime.now(timezone.utc).isoformat(),
+                    }
+                }
+            )
+
+        # Record in stock_transactions audit ledger
+        await self.stock_transactions.insert_one({
+            "id": f"tx-{uuid.uuid4().hex[:6]}",
+            "site": site_name,
+            "material": work_or_mat,
+            "quantity": qty,
+            "unit": item_dict.get("measurement") or item_dict.get("unit") or "Units",
+            "type": "stock_out",
+            "reference": item_dict["id"],
+            "actor": item_dict.get("authorizedBy") or "Admin User",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "notes": f"Material Outward: {work_or_mat} for {item_dict.get('project') or site_name}",
+        })
+
+        # Log Activity to Admin
+        await self.log_activity(
+            text=f"Material Outward: Dispatched {qty} {item_dict.get('measurement')} at {item_dict.get('site')}",
+            subtext=f"Project: {item_dict.get('project')} | Work: {item_dict.get('natureOfWork')}",
+            site=item_dict.get("site", "On-Site"),
+            act_type="stock_out",
+            actor="Supervisor",
+            target_role="admin",
+        )
+
+        await self._persist()
+        return self._doc_to_res(item_dict)
+
+    # -----------------------------------------------------------------------
+    # Key Screens: 8. Labour Entry
+    # -----------------------------------------------------------------------
+    async def list_labour_entries(self) -> List[Dict[str, Any]]:
+        cursor = self.labour_entries.find({}).sort("createdOn", -1)
+        docs = await cursor.to_list(length=200)
+        return [self._doc_to_res(d) for d in docs]
+
+    async def create_labour_entry(self, data: LabourEntryCreate) -> Dict[str, Any]:
+        item_dict = data.model_dump()
+        item_dict["id"] = f"lab-{uuid.uuid4().hex[:6]}"
+        item_dict["createdOn"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+        await self.labour_entries.insert_one(item_dict)
+
+        # Log Activity to Admin
+        total_workers = sum([
+            int(item_dict.get("masons") or 0),
+            int(item_dict.get("helpers") or 0),
+            int(item_dict.get("carpenters") or 0),
+            int(item_dict.get("barBenders") or 0),
+            int(item_dict.get("electricians") or 0),
+            int(item_dict.get("plumbers") or 0),
+        ])
+        await self.log_activity(
+            text=f"Daily Labour Entry: {total_workers} workers at {item_dict.get('site')}",
+            subtext=f"Project: {item_dict.get('project')} | Work: {item_dict.get('natureOfWork')} | Date: {item_dict.get('date')}",
+            site=item_dict.get("site", "On-Site"),
+            act_type="request",
+            actor="Supervisor",
+            target_role="admin",
+        )
+
+        await self._persist()
+        return self._doc_to_res(item_dict)
+
+    async def delete_labour_entry(self, entry_id: str) -> bool:
+        res = await self.labour_entries.delete_one({"$or": [{"id": entry_id}, {"_id": entry_id}]})
+        await self._persist()
+        return res.deleted_count > 0

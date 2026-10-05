@@ -38,6 +38,13 @@ async def seed_database() -> None:
         "site_photos",
         "activities",
         "stock_transactions",
+        "projects_master",
+        "supervisors_master",
+        "project_durations",
+        "inventory_master",
+        "material_inward",
+        "material_outward",
+        "labour_entries",
     ]
     for coll_name in collections_to_clean:
         await db[coll_name].delete_many({})

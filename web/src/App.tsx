@@ -6,26 +6,28 @@ import { DashboardProvider } from './context/DashboardContext';
 import { AuthLayout } from './layouts/AuthLayout';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { SupervisorDashboard } from './pages/SupervisorDashboard';
-import { PropertiesPage } from './pages/PropertiesPage';
-import { FavoritesPage } from './pages/FavoritesPage';
-import { EnquiriesPage } from './pages/EnquiriesPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { SitesPage } from './pages/SitesPage';
-import { MySitePage } from './pages/MySitePage';
-import { InventoryPage } from './pages/InventoryPage';
-import { StockInPage } from './pages/StockInPage';
-import { StockOutPage } from './pages/StockOutPage';
-import { MaterialRequestsPage } from './pages/MaterialRequestsPage';
-import { DeliveriesPage } from './pages/DeliveriesPage';
-import { PhotoMonitoringPage } from './pages/PhotoMonitoringPage';
-import { ReportsPage } from './pages/ReportsPage';
-import { SiteMapViewPage } from './pages/SiteMapViewPage';
-import { LowStockAlertsPage } from './pages/LowStockAlertsPage';
+import {
+  LoginPage,
+  RegisterPage,
+  DashboardPage,
+  AdminDashboard,
+  SupervisorDashboard,
+  ProfilePage,
+  MySitePage,
+  InventoryPage,
+  ReportsPage,
+  LowStockAlertsPage,
+  ProjectMasterPage,
+  SupervisorMasterPage,
+  ProjectDurationPage,
+  InventoryMasterPage,
+  InwardMaterialPage,
+  OutwardMaterialPage,
+  MaterialRequestsPage,
+  LabourEntryPage,
+  PrivacyPolicyPage,
+  TermsConditionsPage,
+} from './pages';
 
 import {
   NotFound,
@@ -52,13 +54,18 @@ export const App: React.FC = () => {
         <DashboardProvider>
           <BrowserRouter>
             <Routes>
-              {/* Public Auth Routes */}
+              {/* Public Auth & Legal Routes */}
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
+              <Route path="/terms" element={<TermsConditionsPage />} />
+              <Route path="/terms-and-conditions" element={<Navigate to="/terms" replace />} />
+
               <Route element={<AuthLayout />}>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
               </Route>
 
-              {/* Protected Authenticated Dashboard & Real Estate Routes */}
+              {/* Protected Authenticated Workflow & Management Routes */}
               <Route
                 element={
                   <ProtectedRoute>
@@ -70,23 +77,21 @@ export const App: React.FC = () => {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
                 <Route path="/supervisor/dashboard" element={<SupervisorDashboard />} />
-                <Route path="/properties" element={<PropertiesPage />} />
-                <Route path="/favorites" element={<FavoritesPage />} />
-                <Route path="/enquiries" element={<EnquiriesPage />} />
-                <Route path="/sites" element={<SitesPage />} />
+                <Route path="/projects" element={<ProjectMasterPage />} />
+                <Route path="/supervisors" element={<Navigate to="/projects?tab=supervisors" replace />} />
+                <Route path="/project-duration" element={<Navigate to="/projects?tab=durations" replace />} />
+                <Route path="/inventory-master" element={<Navigate to="/inventory" replace />} />
+                <Route path="/material-inward" element={<InwardMaterialPage />} />
+                <Route path="/material-outward" element={<OutwardMaterialPage />} />
+                <Route path="/material-requests" element={<MaterialRequestsPage />} />
+                <Route path="/labour-entry" element={<LabourEntryPage />} />
+                <Route path="/sites" element={<Navigate to="/projects" replace />} />
                 <Route path="/my-site" element={<MySitePage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
-                <Route path="/stock-in" element={<StockInPage />} />
-                <Route path="/stock-out" element={<StockOutPage />} />
-                <Route path="/material-requests" element={<MaterialRequestsPage />} />
-                <Route path="/deliveries" element={<DeliveriesPage />} />
-                <Route path="/photo-monitoring" element={<PhotoMonitoringPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/map" element={<SiteMapViewPage />} />
                 <Route path="/low-stock" element={<LowStockAlertsPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/users" element={<SitesPage />} />
-                <Route path="/suppliers" element={<DeliveriesPage />} />
+                <Route path="/users" element={<Navigate to="/supervisors" replace />} />
                 <Route path="/settings" element={<ProfilePage />} />
                 <Route path="/notifications" element={<LowStockAlertsPage />} />
               </Route>

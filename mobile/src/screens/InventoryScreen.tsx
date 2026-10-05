@@ -65,10 +65,10 @@ export const InventoryScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.headerTitle}>Inventory</Text>
         <TouchableOpacity
           style={styles.stockInBtn}
-          onPress={() => navigation.navigate('StockIn')}
+          onPress={() => navigation.navigate('MaterialInward')}
         >
           <Ionicons name="add" size={14} color="#FFFFFF" />
-          <Text style={styles.stockInBtnText}>Stock In</Text>
+          <Text style={styles.stockInBtnText}>Inward</Text>
         </TouchableOpacity>
       </View>
 

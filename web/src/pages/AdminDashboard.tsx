@@ -6,6 +6,7 @@ import { StockBarChart } from '../components/StockBarChart';
 import { EmptyState } from '../components/common/EmptyState';
 import { ImageUploadField } from '../components/common/ImageUploadField';
 import { userService } from '../services/user.service';
+import { constructionService } from '../services/construction.service';
 import {
   Building2,
   Package,
@@ -27,6 +28,12 @@ import {
   Eye,
   X,
   Compass,
+  Send,
+  MessageSquare,
+  HardHat,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Bell,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 
@@ -37,17 +44,23 @@ export const AdminDashboard: React.FC = () => {
     sites,
     inventory,
     lowStockAlerts,
-    materialRequests,
-    deliveries,
+    inwardEntries,
+    outwardEntries,
+    labourEntries,
+    projectsMaster,
     activities,
-    approveRequest,
-    rejectRequest,
+    refreshData,
     addSite,
     isLoadingData,
   } = useDashboardContext();
 
   const [supervisors, setSupervisors] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
+  const [showInstructionModal, setShowInstructionModal] = useState(false);
+  const [instructionSite, setInstructionSite] = useState('');
+  const [instructionType, setInstructionType] = useState('delivery');
+  const [instructionText, setInstructionText] = useState('');
+  const [instructionSubmitting, setInstructionSubmitting] = useState(false);
   const [newSite, setNewSite] = useState({
     name: '',
     code: '',
@@ -73,6 +86,32 @@ export const AdminDashboard: React.FC = () => {
 
   const userName = user?.name || 'Admin';
 
+  const handleSendInstruction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!instructionText.trim()) return;
+    try {
+      setInstructionSubmitting(true);
+      const chosenSite = instructionSite || (sites[0]?.name || 'All Sites');
+      await constructionService.createActivity({
+        text: instructionType === 'delivery'
+          ? `Material Delivery Notice: ${instructionText.trim()}`
+          : `Admin Site Instruction: ${instructionText.trim()}`,
+        site: chosenSite,
+        type: instructionType,
+        words: instructionText.trim(),
+        actor: userName,
+        targetRole: 'supervisor',
+      });
+      setInstructionText('');
+      setShowInstructionModal(false);
+      await refreshData();
+    } catch (err) {
+      console.error('Failed to send instruction:', err);
+    } finally {
+      setInstructionSubmitting(false);
+    }
+  };
+
   // Real calculations
   const totalSitesCount = sites.length;
   const activeSitesCount = sites.filter((s) => s.status === 'Active').length;
@@ -85,25 +124,26 @@ export const AdminDashboard: React.FC = () => {
       ? `₹${(totalStockValue / 100000).toFixed(1)} L`
       : `₹${totalStockValue.toLocaleString('en-IN')}`;
 
-  const pendingRequests = materialRequests.filter((r) => r.status === 'Pending');
-  const activeDeliveries = deliveries.filter((d) => d.status === 'In Transit' || d.status === 'Expected');
   const isSystemEmpty = totalSitesCount === 0 && totalMaterialsCount === 0;
 
-  // Real weekly stock movement chart data based on actual logged activities
+  // Real weekly stock movement chart data based on actual logged inward and outward entries
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const chartDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const chartBarData = chartDays.map((day) => {
-    const dayActs = activities.filter((act) => {
-      const timeVal = act.time || (act as any).timestamp;
-      if (!timeVal) return false;
-      const d = new Date(timeVal);
-      if (isNaN(d.getTime())) return false;
-      return dayLabels[d.getDay()] === day;
-    });
+    const stockIn = inwardEntries.filter((e) => {
+      if (!e.date) return false;
+      const d = new Date(e.date);
+      return !isNaN(d.getTime()) && dayLabels[d.getDay()] === day;
+    }).length;
+    const stockOut = outwardEntries.filter((e) => {
+      if (!e.date) return false;
+      const d = new Date(e.date);
+      return !isNaN(d.getTime()) && dayLabels[d.getDay()] === day;
+    }).length;
     return {
       day,
-      stockIn: dayActs.filter((a) => a.type === 'stock_in').length,
-      stockOut: dayActs.filter((a) => a.type === 'stock_out').length,
+      stockIn,
+      stockOut,
     };
   });
 
@@ -156,7 +196,7 @@ export const AdminDashboard: React.FC = () => {
           <Button
             variant="brand"
             size="sm"
-            onClick={() => setShowAddSiteModal(true)}
+            onClick={() => navigate('/projects')}
             leftIcon={<Plus className="w-4 h-4" />}
           >
             Add Project Site
@@ -185,7 +225,7 @@ export const AdminDashboard: React.FC = () => {
               className="px-4 py-2.5 bg-white text-[#0D5C3A] hover:bg-emerald-50 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Create First Project Site</span>
+              <span>Create First Project Site</span>
             </button>
             <Link
               to="/inventory"
@@ -215,7 +255,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
             <span className="text-slate-400">All Locations</span>
-            <Link to="/sites" className="text-[#0D5C3A] font-bold hover:underline flex items-center gap-1">
+            <Link to="/projects" className="text-[#0D5C3A] font-bold hover:underline flex items-center gap-1">
               <span>Manage</span>
               <ChevronRight className="w-3 h-3" />
             </Link>
@@ -294,73 +334,63 @@ export const AdminDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column (7 cols): Pending Approvals & Active Sites */}
         <div className="lg:col-span-7 space-y-6">
-          {/* Pending Material Indent Approvals Box */}
+          {/* Recent Material Inward Records Box */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#0D5C3A] flex items-center justify-center">
                   <FileSpreadsheet className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Pending Material Approvals</h3>
-                  <p className="text-[11px] text-slate-500">Site Supervisor Indents requiring Head Office Authorization</p>
+                  <h3 className="text-sm font-bold text-slate-900">Recent Material Inward Logs</h3>
+                  <p className="text-[11px] text-slate-500">Live incoming inventory batches and auto-calculated unit valuations</p>
                 </div>
               </div>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                {pendingRequests.length} Pending
-              </span>
+              <Link to="/material-inward" className="text-xs font-bold text-[#0D5C3A] hover:underline">
+                View All Inward &rarr;
+              </Link>
             </div>
 
             <div className="divide-y divide-slate-100 text-xs">
-              {pendingRequests.length === 0 ? (
+              {inwardEntries.length === 0 ? (
                 <div className="p-6 text-center text-slate-400">
                   <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                  <p className="font-semibold text-slate-700">All Indents Reviewed</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">No pending material requisitions waiting for administrative approval.</p>
+                  <p className="font-semibold text-slate-700">No Inward Entries Yet</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Record new incoming inventory in the Material Inward screen.</p>
                 </div>
               ) : (
-                pendingRequests.slice(0, 4).map((req) => (
-                  <div key={req.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/60 transition-colors">
+                inwardEntries.slice(0, 4).map((entry) => (
+                  <div key={entry.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/60 transition-colors">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-900">{req.requestId}</span>
-                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                          {req.site}
+                        <span className="font-mono font-bold text-slate-900">{entry.entryCode}</span>
+                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-[#0D5C3A] border border-emerald-200">
+                          {entry.category}
                         </span>
+                        <span className="text-[10px] text-slate-400">{entry.date}</span>
                       </div>
                       <p className="font-bold text-slate-800 text-sm mt-1">
-                        {req.quantity} {req.unit} of {req.material}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Requested by: <strong>{req.requestedBy}</strong> • Purpose: {req.purpose || 'General Work'}
+                        {entry.quantity} {entry.measurement} of {entry.material}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => approveRequest(req.id)}
-                        className="px-3 py-1.5 bg-[#0D5C3A] hover:bg-[#094228] text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Approve</span>
-                      </button>
-                      <button
-                        onClick={() => rejectRequest(req.id)}
-                        className="px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Reject</span>
-                      </button>
+                    <div className="text-right shrink-0">
+                      <span className="font-extrabold text-slate-900 text-sm block">
+                        ₹{entry.totalValue ? entry.totalValue.toLocaleString('en-IN') : '0'}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        ₹{entry.unitPrice ? entry.unitPrice : '0'} / {entry.measurement}
+                      </span>
                     </div>
                   </div>
                 ))
               )}
             </div>
 
-            {pendingRequests.length > 4 && (
+            {inwardEntries.length > 4 && (
               <div className="p-3 border-t border-slate-100 bg-slate-50 text-center">
-                <Link to="/material-requests" className="text-xs font-bold text-[#0D5C3A] hover:underline">
-                  View All {pendingRequests.length} Indents in Approvals Queue &rarr;
+                <Link to="/material-inward" className="text-xs font-bold text-[#0D5C3A] hover:underline">
+                  View All {inwardEntries.length} Inward Logs &rarr;
                 </Link>
               </div>
             )}
@@ -378,8 +408,8 @@ export const AdminDashboard: React.FC = () => {
                   <p className="text-[11px] text-slate-500">Project locations, assigned site engineers & material stock</p>
                 </div>
               </div>
-              <Link to="/sites" className="text-xs font-bold text-[#0D5C3A] hover:underline">
-                View All Sites
+              <Link to="/projects" className="text-xs font-bold text-[#0D5C3A] hover:underline">
+                View Project Master
               </Link>
             </div>
 
@@ -391,7 +421,7 @@ export const AdminDashboard: React.FC = () => {
                     title="No Project Sites Added Yet"
                     description="Create your first construction project to begin monitoring site supervisors, stock levels, and daily progress."
                     actionLabel="+ Add Project Site"
-                    onAction={() => setShowAddSiteModal(true)}
+                    onAction={() => navigate('/projects')}
                   />
                 </div>
               ) : (
@@ -446,21 +476,82 @@ export const AdminDashboard: React.FC = () => {
             <p className="text-xs text-slate-300 leading-relaxed">
               Manage enterprise site assignments, review consignment dispatches, and access live GIS satellite feeds.
             </p>
-            <div className="grid grid-cols-2 gap-2 pt-2">
+            <div className="grid grid-cols-3 gap-2 pt-2">
               <Link
-                to="/map"
-                className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-200 flex items-center gap-2 transition-colors"
+                to="/projects"
+                className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition-colors text-center"
               >
-                <Compass className="w-4 h-4 text-emerald-400" />
-                <span>GIS Site Map</span>
+                <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Project Master</span>
               </Link>
+              <button
+                type="button"
+                onClick={() => setShowInstructionModal(true)}
+                className="p-2.5 bg-[#0D5C3A] hover:bg-emerald-700 rounded-lg text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-colors shadow-xs text-center"
+              >
+                <Send className="w-4 h-4 text-emerald-200 shrink-0" />
+                <span>Send Notice</span>
+              </button>
               <Link
                 to="/reports"
-                className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-200 flex items-center gap-2 transition-colors"
+                className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition-colors text-center"
               >
-                <Download className="w-4 h-4 text-emerald-400" />
+                <Download className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Export Audit</span>
               </Link>
+            </div>
+          </div>
+
+          {/* Live Supervisor Activity & On-Site Requests Feed */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#0D5C3A] flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Supervisor Activity & Requests</h3>
+                  <p className="text-[11px] text-slate-500">Live inward logs, dispatches, labour entries & requests</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInstructionModal(true)}
+                className="px-2.5 py-1 text-xs font-bold text-[#0D5C3A] bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                <Send className="w-3 h-3" />
+                <span>Send Word</span>
+              </button>
+            </div>
+
+            <div className="divide-y divide-slate-100 text-xs max-h-80 overflow-y-auto">
+              {activities.length === 0 ? (
+                <div className="p-6 text-center text-slate-400">
+                  <p className="font-semibold text-slate-600">No Activity Logged Yet</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Activities performed by site supervisors will appear here in real-time.</p>
+                </div>
+              ) : (
+                activities.slice(0, 7).map((act) => (
+                  <div key={act.id} className="p-3.5 hover:bg-slate-50/60 transition-colors flex items-start justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-xs">{act.text}</span>
+                      </div>
+                      {act.subtext && <p className="text-[11px] text-slate-600">{act.subtext}</p>}
+                      {act.words && (
+                        <p className="text-[11px] text-slate-700 italic bg-slate-50 p-1.5 rounded-md border border-slate-100 mt-1">
+                          "{act.words}"
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 pt-1 text-[10px] text-slate-400">
+                        <span className="font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100">{act.site}</span>
+                        {act.actor && <span>&bull; By <strong>{act.actor}</strong></span>}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-slate-400 shrink-0 mt-0.5">{act.time}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -486,42 +577,40 @@ export const AdminDashboard: React.FC = () => {
             <StockBarChart data={chartBarData} />
           </div>
 
-          {/* Consignments & In-Transit Deliveries */}
+          {/* Outward Material Dispatches */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Truck className="w-4 h-4 text-[#0D5C3A]" />
-                <h3 className="text-sm font-bold text-slate-900">Active Vendor Consignments</h3>
+                <h3 className="text-sm font-bold text-slate-900">Recent Material Outward Dispatches</h3>
               </div>
-              <Link to="/deliveries" className="text-xs font-bold text-[#0D5C3A] hover:underline">
-                View All
+              <Link to="/material-outward" className="text-xs font-bold text-[#0D5C3A] hover:underline">
+                View All Outward &rarr;
               </Link>
             </div>
 
             <div className="divide-y divide-slate-100 text-xs">
-              {deliveries.length === 0 ? (
-                <p className="p-6 text-center text-slate-400">No active vendor consignments recorded.</p>
+              {outwardEntries.length === 0 ? (
+                <p className="p-6 text-center text-slate-400">No material outward dispatches recorded yet.</p>
               ) : (
-                deliveries.slice(0, 4).map((d) => (
-                  <div key={d.id} className="p-3.5 flex items-center justify-between gap-3">
+                outwardEntries.slice(0, 4).map((entry) => (
+                  <div key={entry.id} className="p-3.5 flex items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-900">{d.deliveryId}</span>
-                        <span className={`px-2 py-0.2 rounded-full text-[10px] font-bold ${
-                          d.status === 'Received' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-                        }`}>
-                          {d.status}
+                        <span className="font-semibold text-slate-900">{entry.project}</span>
+                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          {entry.site}
                         </span>
                       </div>
                       <p className="text-slate-700 font-semibold mt-0.5">
-                        {d.supplier} &bull; {d.material}
+                        {entry.quantity} {entry.measurement} &bull; {entry.natureOfWork}
                       </p>
-                      <p className="text-[11px] text-slate-400">Destination: {d.site}</p>
+                      <p className="text-[11px] text-slate-400">Date: {entry.date}</p>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className="font-bold text-slate-800 block">
-                        {d.receivedQty || d.expectedQty} {d.unit}
+                      <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">
+                        Dispatched
                       </span>
                     </div>
                   </div>
@@ -635,6 +724,114 @@ export const AdminDashboard: React.FC = () => {
                   size="sm"
                 >
                   Create Site
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Dispatch Notice / Word to Supervisor Modal */}
+      {showInstructionModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <Send className="w-5 h-5 text-[#0D5C3A]" />
+                <h3 className="text-base font-bold text-slate-900">Send Notice / Word to Supervisor</h3>
+              </div>
+              <button
+                onClick={() => setShowInstructionModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendInstruction} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Target Project Site *</label>
+                <select
+                  value={instructionSite}
+                  onChange={(e) => setInstructionSite(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-[#0D5C3A] text-slate-900 font-medium"
+                >
+                  <option value="">All Assigned Sites</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name} ({s.supervisor ? `Supervisor: ${s.supervisor}` : 'Unassigned'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Notice Category</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInstructionType('delivery')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold text-center border transition-all ${
+                      instructionType === 'delivery'
+                        ? 'bg-emerald-50 border-[#0D5C3A] text-[#0D5C3A]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    🚚 Delivery Notice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInstructionType('request')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold text-center border transition-all ${
+                      instructionType === 'request'
+                        ? 'bg-emerald-50 border-[#0D5C3A] text-[#0D5C3A]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    📋 Site Order
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInstructionType('words')}
+                    className={`py-1.5 px-2 rounded-lg font-semibold text-center border transition-all ${
+                      instructionType === 'words'
+                        ? 'bg-emerald-50 border-[#0D5C3A] text-[#0D5C3A]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    💬 Message/Word
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Instruction Details / Words *</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. 200 bags of Ultratech 53-grade cement truck will arrive at 3:00 PM. Please inspect delivery challan."
+                  value={instructionText}
+                  onChange={(e) => setInstructionText(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0D5C3A] text-slate-900 bg-white placeholder:text-slate-400 font-medium"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowInstructionModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="brand"
+                  size="sm"
+                  disabled={instructionSubmitting || !instructionText.trim()}
+                  leftIcon={<Send className="w-3.5 h-3.5" />}
+                >
+                  {instructionSubmitting ? 'Dispatching...' : 'Dispatch to Supervisor'}
                 </Button>
               </div>
             </form>

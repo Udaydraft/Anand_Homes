@@ -55,6 +55,7 @@ export const DashboardLayout: React.FC = () => {
     globalSearch,
     setGlobalSearch,
     selectedDate,
+    activities,
   } = useDashboardContext();
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
@@ -62,42 +63,43 @@ export const DashboardLayout: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
 
-  const notifications = [
-    { id: 1, title: 'New Property Listed', desc: '4 BHK Luxury Villa in ECR added to portfolio', time: '10m ago', unread: true },
-    { id: 2, title: 'Delivery Received', desc: 'DLV-0042 Cement 195 Bags received at Site Alpha', time: '1h ago', unread: true },
-    { id: 3, title: 'Enquiry Received', desc: 'Client requested a callback for Anna Nagar Apartment', time: '2h ago', unread: false },
-  ];
+  const notifications = activities.slice(0, 8).map((act, idx) => ({
+    id: act.id || String(idx),
+    title: act.text,
+    desc: act.subtext || (act.words ? `Message: ${act.words}` : `Site: ${act.site}`),
+    site: act.site,
+    time: act.time,
+    actor: act.actor,
+    unread: idx < 3,
+  }));
 
   const isAdmin = user?.role === 'admin' || roleMode === 'admin' || user?.email?.toLowerCase().includes('admin@');
   const userRole = isAdmin ? 'Super Admin' : 'Site Supervisor';
   const userName = user?.name || (isAdmin ? 'Admin User' : 'Rajesh Kumar');
   const userEmail = user?.email || (isAdmin ? 'admin@anandhomes.com' : 'rajesh.k@anandhomes.com');
 
-  // Navigation items strictly tailored by role
+  // Navigation items strictly tailored to the streamlined workflow
   const adminNavItems: NavItem[] = [
     { label: 'Admin Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'Sites / Projects', path: '/sites', icon: Building2 },
-    { label: 'Global Inventory', path: '/inventory', icon: Package },
-    { label: 'Material Approvals', path: '/material-requests', icon: FileSpreadsheet },
-    { label: 'Deliveries Monitoring', path: '/deliveries', icon: Truck },
-    { label: 'Photo Monitoring', path: '/photo-monitoring', icon: Camera },
-    { label: 'GIS Site Map', path: '/map', icon: MapPin },
+    { label: 'Project & Site Master', path: '/projects', icon: Building2 },
+    { label: 'Material Inward', path: '/material-inward', icon: ArrowDownToLine },
+    { label: 'Material Outward', path: '/material-outward', icon: ArrowUpFromLine },
+    { label: 'Material Requests', path: '/material-requests', icon: FileSpreadsheet },
+    { label: 'Labour Entry', path: '/labour-entry', icon: HardHat },
+    { label: 'Stock Balance Tracking', path: '/inventory', icon: Package },
     { label: 'Low Stock Alerts', path: '/low-stock', icon: AlertTriangle },
-    { label: 'Reports & Analytics', path: '/reports', icon: BarChart3 },
-    { label: 'Properties Portfolio', path: '/properties', icon: Building2 },
+    { label: 'Reports & Audit', path: '/reports', icon: BarChart3 },
     { label: 'Profile Settings', path: '/profile', icon: Settings },
   ];
 
   const supervisorNavItems: NavItem[] = [
     { label: 'Supervisor Dashboard', path: '/supervisor/dashboard', icon: LayoutDashboard },
-    { label: 'My Assigned Site', path: '/my-site', icon: HardHat },
-    { label: 'Record Stock In', path: '/stock-in', icon: ArrowDownToLine },
-    { label: 'Record Stock Out', path: '/stock-out', icon: ArrowUpFromLine },
-    { label: 'Material Indents', path: '/material-requests', icon: FileSpreadsheet },
-    { label: 'Consignment Deliveries', path: '/deliveries', icon: Truck },
-    { label: 'Site Progress Photos', path: '/photo-monitoring', icon: Camera },
+    { label: 'My Project Site', path: '/my-site', icon: Building2 },
+    { label: 'Material Inward', path: '/material-inward', icon: ArrowDownToLine },
+    { label: 'Request Materials', path: '/material-requests', icon: FileSpreadsheet },
+    { label: 'Labour Entry', path: '/labour-entry', icon: HardHat },
+    { label: 'Inventory Balance', path: '/inventory', icon: Package },
     { label: 'Low Stock Warnings', path: '/low-stock', icon: AlertTriangle },
-    { label: 'Site Map View', path: '/map', icon: MapPin },
     { label: 'My Profile', path: '/profile', icon: Settings },
   ];
 
@@ -108,22 +110,18 @@ export const DashboardLayout: React.FC = () => {
     if (p === '/admin/dashboard') return 'Super Admin Dashboard';
     if (p === '/supervisor/dashboard') return 'Site Supervisor Dashboard';
     if (p === '/dashboard' || p === '/') return isAdmin ? 'Super Admin Dashboard' : 'Site Supervisor Dashboard';
-    if (p.includes('/properties')) return 'Properties Portfolio';
-    if (p.includes('/favorites')) return 'Saved Favorites';
-    if (p.includes('/enquiries')) return 'Property Enquiries';
-    if (p.includes('/sites')) return 'Sites / Projects';
-    if (p.includes('/my-site')) return 'My Assigned Site';
-    if (p.includes('/inventory')) return 'Inventory Management';
-    if (p.includes('/stock-in')) return 'Record Stock In';
-    if (p.includes('/stock-out')) return 'Record Stock Out';
-    if (p.includes('/material-requests')) return isAdmin ? 'Material Requisition Approvals' : 'Site Material Indents';
-    if (p.includes('/deliveries')) return 'Deliveries & Shipments';
-    if (p.includes('/photo-monitoring')) return 'Photo Monitoring';
-    if (p.includes('/reports')) return 'Reports & Audit';
-    if (p.includes('/map')) return 'Site Map Telemetry';
+    if (p.includes('/projects') || p.includes('/supervisors') || p.includes('/project-duration')) return 'Project & Site Setup';
+    if (p.includes('/my-site')) return 'My Project Site';
+    if (p.includes('/material-inward')) return 'Inward Material Entry';
+    if (p.includes('/material-outward')) return 'Outward Material Entry';
+    if (p.includes('/material-requests')) return 'Site-Wise Material Requests';
+    if (p.includes('/labour-entry')) return 'Labour Entry';
+    if (p.includes('/sites')) return 'Sites & Locations';
+    if (p.includes('/inventory') || p.includes('/inventory-master')) return 'Stock Balance Tracking';
+    if (p.includes('/reports')) return 'Reports & Audit Trail';
     if (p.includes('/low-stock')) return 'Low Stock Alerts';
     if (p.includes('/profile')) return 'User Profile';
-    return 'Operations Portal';
+    return 'Construction Management Portal';
   };
 
   const handleLogout = async () => {
@@ -214,9 +212,9 @@ export const DashboardLayout: React.FC = () => {
           })}
         </div>
 
-        {/* Sidebar Footer Logout */}
+        {/* Sidebar Footer Logout & Legal */}
         {sidebarOpen && (
-          <div className="p-3 border-t border-[#0E4F32]">
+          <div className="p-3 border-t border-[#0E4F32] space-y-2">
             <button
               onClick={handleLogout}
               className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[#082E1E] hover:bg-rose-950/60 text-emerald-200/80 hover:text-rose-300 border border-[#0F4A30] text-xs font-bold transition-colors"
@@ -224,6 +222,11 @@ export const DashboardLayout: React.FC = () => {
               <LogOut className="w-3.5 h-3.5" />
               <span>Log Out</span>
             </button>
+            <div className="flex items-center justify-center gap-3 text-[10px] text-emerald-300/60">
+              <Link to="/privacy" className="hover:text-emerald-200 hover:underline">Privacy Policy</Link>
+              <span>&bull;</span>
+              <Link to="/terms" className="hover:text-emerald-200 hover:underline">Terms</Link>
+            </div>
           </div>
         )}
       </aside>
@@ -253,19 +256,19 @@ export const DashboardLayout: React.FC = () => {
             {/* Contextual Role Quick Link */}
             {isAdmin ? (
               <Link
-                to="/sites"
+                to="/projects"
                 className="hidden md:inline-flex items-center gap-1.5 ml-3 px-3 py-1 rounded-full text-xs font-bold text-[#0D5C3A] bg-emerald-50 hover:bg-emerald-100 transition-colors"
               >
                 <Building2 className="w-3.5 h-3.5" />
-                <span>Manage Project Sites</span>
+                <span>Project Master</span>
               </Link>
             ) : (
               <Link
-                to="/stock-in"
+                to="/material-inward"
                 className="hidden md:inline-flex items-center gap-1.5 ml-3 px-3 py-1 rounded-full text-xs font-bold text-[#0D5C3A] bg-emerald-50 hover:bg-emerald-100 transition-colors"
               >
                 <ArrowDownToLine className="w-3.5 h-3.5" />
-                <span>+ Record Stock In</span>
+                <span>Record Material Inward</span>
               </Link>
             )}
           </div>
@@ -313,25 +316,37 @@ export const DashboardLayout: React.FC = () => {
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white flex items-center justify-center text-[8px] text-white font-bold" />
+                {notifications.some((n) => n.unread) && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white flex items-center justify-center text-[8px] text-white font-bold" />
+                )}
               </button>
 
               {showNotifications && (
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
                     <span className="text-xs font-bold text-slate-800">Notifications</span>
-                    <span className="text-[10px] text-[#0D5C3A] font-semibold cursor-pointer">Mark all as read</span>
+                    {notifications.length > 0 && (
+                      <span className="text-[10px] text-[#0D5C3A] font-semibold cursor-pointer">Mark all as read</span>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    {notifications.map((n) => (
-                      <div key={n.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs hover:bg-slate-100 transition-colors cursor-pointer">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span className="font-bold text-slate-800">{n.title}</span>
-                          <span className="text-[10px] text-slate-400">{n.time}</span>
+                    {notifications.length === 0 ? (
+                      <p className="text-center py-6 text-xs text-slate-400">No new notifications</p>
+                    ) : (
+                      notifications.map((n) => (
+                        <div key={n.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs hover:bg-slate-100 transition-colors">
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="font-bold text-slate-800 text-xs line-clamp-1">{n.title}</span>
+                            <span className="text-[10px] text-slate-400 shrink-0">{n.time}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-snug line-clamp-2">{n.desc}</p>
+                          <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100/60 text-[10px]">
+                            <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">{n.site}</span>
+                            {n.actor && <span className="text-slate-400 font-medium">By {n.actor}</span>}
+                          </div>
                         </div>
-                        <p className="text-[11px] text-slate-600 leading-snug">{n.desc}</p>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -380,12 +395,12 @@ export const DashboardLayout: React.FC = () => {
                     <span>My Profile</span>
                   </Link>
                   <Link
-                    to={isAdmin ? '/sites' : '/my-site'}
+                    to={isAdmin ? '/projects' : '/my-site'}
                     onClick={() => setShowUserMenu(false)}
                     className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 font-medium"
                   >
                     <HardHat className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{isAdmin ? 'Construction Sites' : 'My Assigned Site'}</span>
+                    <span>{isAdmin ? 'Project Master' : 'My Assigned Site'}</span>
                   </Link>
                   <Link
                     to="/inventory"
@@ -414,6 +429,18 @@ export const DashboardLayout: React.FC = () => {
         <main className="flex-1 p-4 sm:p-6 lg:p-7 max-w-[1600px] w-full mx-auto">
           <Outlet />
         </main>
+
+        {/* Global Compliance Footer */}
+        <footer className="border-t border-slate-200/60 bg-white/70 backdrop-blur-xs px-4 sm:px-6 py-3 text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>&copy; {new Date().getFullYear()} Anand Homes Construction &amp; Material Management Platform</span>
+          <div className="flex items-center gap-4 text-slate-500 font-medium">
+            <Link to="/privacy" className="hover:text-[#0D5C3A] hover:underline">Privacy Policy</Link>
+            <span>&bull;</span>
+            <Link to="/terms" className="hover:text-[#0D5C3A] hover:underline">Terms &amp; Conditions</Link>
+            <span>&bull;</span>
+            <span className="text-slate-400">v2.4</span>
+          </div>
+        </footer>
       </div>
     </div>
   );

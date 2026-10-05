@@ -30,8 +30,18 @@ interface ReportCardItem {
 }
 
 export const ReportsPage: React.FC = () => {
-  const { sites, inventory, materialRequests, deliveries, activities, selectedSite, setSelectedSite, sitesList } =
-    useDashboardContext();
+  const {
+    sites,
+    inventory,
+    materialRequests,
+    deliveries,
+    activities,
+    inwardEntries,
+    outwardEntries,
+    selectedSite,
+    setSelectedSite,
+    sitesList,
+  } = useDashboardContext();
   const [selectedReport, setSelectedReport] = useState<ReportCardItem | null>(null);
   const [reportData, setReportData] = useState<any | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
@@ -124,7 +134,7 @@ export const ReportsPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [selectedReport, selectedSite, inventory, activities, materialRequests, deliveries, sites]);
+  }, [selectedReport, selectedSite, inventory, activities, materialRequests, deliveries, sites, inwardEntries, outwardEntries]);
 
   // Fallback builder that uses real context state
   const buildContextReportFallback = (reportId: string, siteFilter?: string) => {
@@ -143,22 +153,58 @@ export const ReportsPage: React.FC = () => {
         summary: { totalItems: items.length },
       };
     } else if (reportId === 'material-movement') {
+      const filteredInw = filterSite ? inwardEntries.filter((i) => i.site === filterSite) : inwardEntries;
+      const filteredOut = filterSite ? outwardEntries.filter((o) => o.site === filterSite) : outwardEntries;
       const acts = filterSite ? activities.filter((a) => a.site === filterSite) : activities;
-      const headers = ['Timestamp', 'Type', 'Material', 'Site', 'Details', 'Logged By'];
-      const rows = acts.map((a: any) => [
-        a.time || a.timestamp || '',
-        a.type === 'stock_in' ? 'Stock In' : a.type === 'stock_out' ? 'Stock Out' : a.type || '',
-        a.material || a.subtext || '',
-        a.site || '',
-        a.text || '',
-        a.user || a.requestedBy || 'Site Staff',
-      ]);
+
+      const headers = ['Date', 'Type', 'Material Item', 'Site', 'Details & Valuation', 'Authority'];
+      const rows: string[][] = [];
+
+      filteredInw.forEach((item) => {
+        rows.push([
+          item.date || item.createdOn || '',
+          'Material Inward',
+          item.material,
+          item.site || filterSite || 'Site A',
+          `Code: ${item.entryCode} | Qty: ${item.quantity} ${item.measurement} | Val: ₹${Number(item.totalValue || 0).toLocaleString()}`,
+          'Supervisor',
+        ]);
+      });
+
+      filteredOut.forEach((item) => {
+        rows.push([
+          item.date || item.createdOn || '',
+          'Material Outward',
+          item.natureOfWork || 'Dispatched',
+          item.site || filterSite || 'Site A',
+          `Project: ${item.project} | Qty: ${item.quantity} ${item.measurement}`,
+          'Supervisor',
+        ]);
+      });
+
+      acts.forEach((a: any) => {
+        if (!rows.some((r) => r[4].includes(a.text || ''))) {
+          rows.push([
+            a.time || a.timestamp || '',
+            a.type === 'stock_in' ? 'Stock In' : a.type === 'stock_out' ? 'Stock Out' : a.type || 'Action',
+            a.material || a.subtext || 'Material',
+            a.site || '',
+            a.text || '',
+            a.user || a.actor || 'Site Staff',
+          ]);
+        }
+      });
+
       return {
         title: 'Material Movement & Inward/Outward Audit',
         site: filterSite || 'All Sites',
         headers,
         rows,
-        summary: { totalTransactions: acts.length },
+        summary: {
+          totalTransactions: rows.length,
+          inwardReceipts: filteredInw.length,
+          outwardDispatches: filteredOut.length,
+        },
       };
     } else if (reportId === 'consumption-requests') {
       const reqs = filterSite ? materialRequests.filter((r) => r.site === filterSite) : materialRequests;

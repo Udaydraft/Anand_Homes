@@ -39,11 +39,9 @@ export const ErrorPageLayout: React.FC<ErrorPageLayoutProps> = ({
       <footer className="max-w-5xl mx-auto w-full pt-6 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400 font-medium">
         <p>© {new Date().getFullYear()} Anand Homes Construction Management. All rights reserved.</p>
         <div className="flex items-center gap-4">
-          <Link to="/dashboard" className="hover:text-slate-600 transition-colors">Support</Link>
+          <Link to="/privacy" className="hover:text-slate-600 transition-colors">Privacy Policy</Link>
           <span>•</span>
-          <Link to="/dashboard" className="hover:text-slate-600 transition-colors">Privacy Policy</Link>
-          <span>•</span>
-          <Link to="/dashboard" className="hover:text-slate-600 transition-colors">Status</Link>
+          <Link to="/terms" className="hover:text-slate-600 transition-colors">Terms of Service</Link>
         </div>
       </footer>
     </div>

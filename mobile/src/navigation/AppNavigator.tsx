@@ -3,24 +3,26 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import { useAuth } from '../hooks/useAuth';
-import { LoginScreen } from '../screens/LoginScreen';
-import { RegisterScreen } from '../screens/RegisterScreen';
-import { DashboardScreen } from '../screens/DashboardScreen';
-import { SitesScreen } from '../screens/SitesScreen';
-import { MySiteScreen } from '../screens/MySiteScreen';
-import { InventoryScreen } from '../screens/InventoryScreen';
-import { MaterialRequestsScreen } from '../screens/MaterialRequestsScreen';
-import { RequestDetailsScreen } from '../screens/RequestDetailsScreen';
-import { StockInScreen } from '../screens/StockInScreen';
-import { StockOutScreen } from '../screens/StockOutScreen';
-import { DeliveriesScreen } from '../screens/DeliveriesScreen';
-import { DeliveryDetailsScreen } from '../screens/DeliveryDetailsScreen';
-import { PhotoMonitoringScreen } from '../screens/PhotoMonitoringScreen';
-import { SiteMapViewScreen } from '../screens/SiteMapViewScreen';
-import { LowStockAlertScreen } from '../screens/LowStockAlertScreen';
-import { ReportsScreen } from '../screens/ReportsScreen';
-import { ProfileScreen } from '../screens/ProfileScreen';
-import { MoreMenuScreen } from '../screens/MoreMenuScreen';
+import {
+  LoginScreen,
+  RegisterScreen,
+  DashboardScreen,
+  MySiteScreen,
+  InventoryScreen,
+  LowStockAlertScreen,
+  ReportsScreen,
+  ProfileScreen,
+  MoreMenuScreen,
+  ProjectMasterScreen,
+  SupervisorMasterScreen,
+  ProjectDurationScreen,
+  InventoryMasterScreen,
+  MaterialInwardScreen,
+  MaterialOutwardScreen,
+  LabourEntryScreen,
+  PrivacyPolicyScreen,
+  TermsConditionsScreen,
+} from '../screens';
 import { Loading } from '../components/Loading';
 import { View, StyleSheet } from 'react-native';
 
@@ -61,21 +63,22 @@ export const AppNavigator: React.FC = () => {
         }}
       >
         <Stack.Screen name="Dashboard" component={DashboardScreen} />
-        <Stack.Screen name="Sites" component={SitesScreen} />
+        <Stack.Screen name="ProjectMaster" component={ProjectMasterScreen} />
+        <Stack.Screen name="SupervisorMaster" component={SupervisorMasterScreen} />
+        <Stack.Screen name="ProjectDuration" component={ProjectDurationScreen} />
+        <Stack.Screen name="InventoryMaster" component={InventoryMasterScreen} />
+        <Stack.Screen name="MaterialInward" component={MaterialInwardScreen} />
+        <Stack.Screen name="MaterialOutward" component={MaterialOutwardScreen} />
+        <Stack.Screen name="LabourEntry" component={LabourEntryScreen} />
+        <Stack.Screen name="Sites" component={ProjectMasterScreen} />
         <Stack.Screen name="MySite" component={MySiteScreen} />
         <Stack.Screen name="Inventory" component={InventoryScreen} />
-        <Stack.Screen name="MaterialRequests" component={MaterialRequestsScreen} />
-        <Stack.Screen name="RequestDetails" component={RequestDetailsScreen} />
-        <Stack.Screen name="StockIn" component={StockInScreen} />
-        <Stack.Screen name="StockOut" component={StockOutScreen} />
-        <Stack.Screen name="Deliveries" component={DeliveriesScreen} />
-        <Stack.Screen name="DeliveryDetails" component={DeliveryDetailsScreen} />
-        <Stack.Screen name="PhotoMonitoring" component={PhotoMonitoringScreen} />
-        <Stack.Screen name="SiteMapView" component={SiteMapViewScreen} />
         <Stack.Screen name="LowStockAlert" component={LowStockAlertScreen} />
         <Stack.Screen name="Reports" component={ReportsScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="MoreMenu" component={MoreMenuScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+        <Stack.Screen name="TermsConditions" component={TermsConditionsScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
       </Stack.Navigator>

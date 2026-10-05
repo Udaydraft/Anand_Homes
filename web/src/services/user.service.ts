@@ -36,4 +36,9 @@ export const userService = {
   async deleteUser(id: string): Promise<void> {
     await apiClient.delete<ApiResponse<any>>(`/users/${id}`);
   },
+
+  async changePassword(data: { current_password: string; new_password: string }): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.post<ApiResponse<{ success: boolean; message: string }>>('/users/change-password', data);
+    return res.data.data!;
+  },
 };

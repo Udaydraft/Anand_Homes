@@ -16,15 +16,29 @@ import {
   ChevronRight,
   Clock,
   Package,
+  FileSpreadsheet,
+  HardHat,
+  Truck,
 } from 'lucide-react';
 import { EmptyState } from '../components/common/EmptyState';
 
 export const MySitePage: React.FC = () => {
-  const { selectedSite, sites, myAssignedSites, roleMode, photos, inventory, deliveries } = useDashboardContext();
+  const {
+    selectedSite,
+    setSelectedSite,
+    sites,
+    myAssignedSites,
+    isSupervisor,
+    roleMode,
+    photos,
+    inventory,
+    deliveries,
+  } = useDashboardContext();
   const navigate = useNavigate();
 
   // If supervisor, strictly scope to myAssignedSites; if admin, scope to sites
-  const targetSites = roleMode === 'supervisor' ? myAssignedSites : sites;
+  const supervisorMode = isSupervisor || roleMode === 'supervisor';
+  const targetSites = supervisorMode ? (myAssignedSites.length > 0 ? myAssignedSites : sites) : sites;
   const site = targetSites.find((s) => s.name === selectedSite) || targetSites[0] || null;
 
   if (!site) {
@@ -33,9 +47,9 @@ export const MySitePage: React.FC = () => {
         variant="card"
         icon={<Building2 className="w-10 h-10 text-amber-500" />}
         title="No Project Site Assigned"
-        description="You currently do not have any construction sites assigned to your supervisor account. Please ask an administrator to assign a site to your profile in the Sites Management portal."
+        description="You currently do not have any construction sites assigned to your supervisor account. Please ask an administrator to assign a site to your profile in the Project & Site Master portal."
         actionLabel="Back to Dashboard"
-        onAction={() => navigate(roleMode === 'supervisor' ? '/supervisor/dashboard' : '/admin/dashboard')}
+        onAction={() => navigate(supervisorMode ? '/supervisor/dashboard' : '/admin/dashboard')}
       />
     );
   }
@@ -45,6 +59,61 @@ export const MySitePage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Quick Action Navigation Bar for Supervisor */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Link
+          to="/material-inward"
+          className="bg-white border border-slate-200/80 hover:border-emerald-500 rounded-xl p-3.5 flex items-center gap-3 shadow-xs hover:shadow-sm transition-all group"
+        >
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 text-[#0D5C3A] flex items-center justify-center group-hover:bg-[#0D5C3A] group-hover:text-white transition-colors">
+            <ArrowDownToLine className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-slate-800 block">Inward Material</span>
+            <span className="text-[10px] text-slate-400">Receive stock deliveries</span>
+          </div>
+        </Link>
+
+        <Link
+          to="/material-requests"
+          className="bg-white border border-slate-200/80 hover:border-blue-500 rounded-xl p-3.5 flex items-center gap-3 shadow-xs hover:shadow-sm transition-all group"
+        >
+          <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+            <FileSpreadsheet className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-slate-800 block">Material Request</span>
+            <span className="text-[10px] text-slate-400">Request site stock</span>
+          </div>
+        </Link>
+
+        <Link
+          to="/labour-entry"
+          className="bg-white border border-slate-200/80 hover:border-amber-500 rounded-xl p-3.5 flex items-center gap-3 shadow-xs hover:shadow-sm transition-all group"
+        >
+          <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
+            <HardHat className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-slate-800 block">Labour Entry</span>
+            <span className="text-[10px] text-slate-400">Log daily site workers</span>
+          </div>
+        </Link>
+
+        <Link
+          to="/inventory"
+          className="bg-white border border-slate-200/80 hover:border-purple-500 rounded-xl p-3.5 flex items-center gap-3 shadow-xs hover:shadow-sm transition-all group"
+        >
+          <div className="w-9 h-9 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
+            <Package className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-slate-800 block">Stock Balance</span>
+            <span className="text-[10px] text-slate-400">Track current stock</span>
+          </div>
+        </Link>
+      </div>
+
       {/* Top Banner Card */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="relative h-48 sm:h-64 bg-slate-900">
@@ -57,21 +126,40 @@ export const MySitePage: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500 text-white font-bold text-[10px] uppercase tracking-wider inline-block mb-1.5">
-                  {site.status}
+                  {site.status || 'Active Construction'}
                 </span>
                 <h2 className="text-2xl font-extrabold">{site.name}</h2>
                 <p className="text-xs text-slate-200 font-medium">
-                  {site.projectType || 'Anna Nagar Residential'} • Code: {site.code}
+                  {site.projectType || 'Residential Project'} • Code: {site.code}
                 </p>
               </div>
 
-              <Link
-                to="/photo-monitoring"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white text-xs font-bold rounded-lg shadow-sm transition-all"
-              >
-                <Camera className="w-4 h-4" />
-                <span>Upload Site Photo</span>
-              </Link>
+              <div className="flex items-center gap-2">
+                {targetSites.length > 1 && (
+                  <div className="bg-black/60 backdrop-blur-xs border border-white/20 rounded-lg px-2.5 py-1.5 flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-slate-200">Site:</span>
+                    <select
+                      value={site.name}
+                      onChange={(e) => setSelectedSite(e.target.value)}
+                      className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+                    >
+                      {targetSites.map((s) => (
+                        <option key={s.id || s.name} value={s.name} className="text-slate-900 bg-white">
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <Link
+                  to="/photo-monitoring"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0D5C3A] hover:bg-[#0A482E] text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Upload Photo</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>

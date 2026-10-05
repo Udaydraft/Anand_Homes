@@ -180,6 +180,15 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.footerText}>
               Anand Homes Construction Management Platform
             </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}>
+              <TouchableOpacity onPress={() => navigation.navigate('PrivacyPolicy')}>
+                <Text style={{ fontSize: 11, color: '#0D5C3A', fontWeight: '600' }}>Privacy Policy</Text>
+              </TouchableOpacity>
+              <Text style={{ fontSize: 11, color: '#94A3B8' }}>•</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('TermsConditions')}>
+                <Text style={{ fontSize: 11, color: '#0D5C3A', fontWeight: '600' }}>Terms & Conditions</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

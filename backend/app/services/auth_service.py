@@ -12,6 +12,8 @@ from app.core.security import (
 from app.models.user import UserModel
 from app.schemas.user import (
     AuthResponseData,
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
     TokenRefreshRequest,
     TokenResponse,
     UserLoginRequest,
@@ -118,6 +120,37 @@ class AuthService:
                 except Exception:
                     pass
 
+        # Check supervisors_master if user not yet created in users collection
+        if not user:
+            import re
+            sup_doc = await self.db["supervisors_master"].find_one({
+                "$or": [
+                    {"loginId": {"$regex": f"^{re.escape(email_clean)}$", "$options": "i"}},
+                    {"loginId": email_clean.split("@")[0]},
+                ]
+            })
+            if sup_doc and (sup_doc.get("password") == req.password):
+                sup_email = sup_doc.get("loginId", "")
+                if "@" not in sup_email:
+                    sup_email = f"{sup_email}@anandhomes.com"
+                user = UserModel(
+                    name=sup_doc.get("name", "Site Supervisor"),
+                    email=sup_email,
+                    password_hash=hash_password(req.password),
+                    role="supervisor",
+                    is_active=True,
+                    login_id=sup_doc.get("loginId"),
+                    assigned_site=sup_doc.get("site"),
+                    assigned_project=sup_doc.get("project"),
+                )
+                await self.user_service.collection.insert_one(user.to_dict())
+                try:
+                    from app.database.mongodb import db_manager
+                    db_manager.mark_dirty()
+                    await db_manager.save_to_disk()
+                except Exception:
+                    pass
+
         if not user or not verify_password(req.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -170,3 +203,106 @@ class AuthService:
             )
 
         return self._generate_tokens(user)
+
+    async def reset_password(self, req: ForgotPasswordRequest) -> dict:
+        """Reset supervisor or user password using their Login ID or Email."""
+        import re
+        id_clean = req.email.strip().lower()
+        new_pwd_hash = hash_password(req.new_password)
+
+        # 1. Search in users collection
+        user = await self.user_service.get_by_email(id_clean)
+        if user:
+            await self.user_service.collection.update_one(
+                {"$or": [{"_id": user.id}, {"id": user.id}]},
+                {"$set": {
+                    "password_hash": new_pwd_hash,
+                    "updated_at": datetime.datetime.now(datetime.timezone.utc),
+                }}
+            )
+
+        # 2. Also search and update supervisors_master collection
+        sup_doc = await self.db["supervisors_master"].find_one({
+            "$or": [
+                {"loginId": {"$regex": f"^{re.escape(id_clean)}$", "$options": "i"}},
+                {"loginId": id_clean.split("@")[0]},
+                {"name": {"$regex": f"^{re.escape(id_clean)}$", "$options": "i"}},
+            ]
+        })
+        if sup_doc:
+            await self.db["supervisors_master"].update_one(
+                {"_id": sup_doc["_id"]},
+                {"$set": {"password": req.new_password}}
+            )
+            # If user was not in users collection, provision now
+            if not user:
+                sup_email = sup_doc.get("loginId", "")
+                if "@" not in sup_email:
+                    sup_email = f"{sup_email}@anandhomes.com"
+                user = UserModel(
+                    name=sup_doc.get("name", "Site Supervisor"),
+                    email=sup_email,
+                    password_hash=new_pwd_hash,
+                    role="supervisor",
+                    is_active=True,
+                    login_id=sup_doc.get("loginId"),
+                    assigned_site=sup_doc.get("site"),
+                    assigned_project=sup_doc.get("project"),
+                )
+                await self.user_service.collection.insert_one(user.to_dict())
+
+        if not user and not sup_doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No account found with Login ID or Email '{req.email}'. Please check your credentials or contact administrator.",
+            )
+
+        try:
+            from app.database.mongodb import db_manager
+            db_manager.mark_dirty()
+            await db_manager.save_to_disk()
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "message": "Password updated successfully. You can now log in with your new password.",
+        }
+
+    async def change_password(self, user_id: str, req: ChangePasswordRequest) -> dict:
+        """Change password for an authenticated user."""
+        user = await self.user_service.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+        if not verify_password(req.current_password, user.password_hash):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+
+        new_hash = hash_password(req.new_password)
+        await self.user_service.collection.update_one(
+            {"$or": [{"_id": user.id}, {"id": user.id}]},
+            {"$set": {
+                "password_hash": new_hash,
+                "updated_at": datetime.datetime.now(datetime.timezone.utc),
+            }}
+        )
+
+        # Sync in supervisors_master if supervisor
+        if getattr(user, "login_id", None) or user.email:
+            await self.db["supervisors_master"].update_many(
+                {"$or": [
+                    {"loginId": getattr(user, "login_id", "")},
+                    {"loginId": user.email},
+                    {"name": user.name},
+                ]},
+                {"$set": {"password": req.new_password}}
+            )
+
+        try:
+            from app.database.mongodb import db_manager
+            db_manager.mark_dirty()
+            await db_manager.save_to_disk()
+        except Exception:
+            pass
+
+        return {"success": True, "message": "Password changed successfully."}

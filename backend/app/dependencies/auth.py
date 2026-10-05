@@ -9,7 +9,6 @@ from app.services.user_service import UserService
 
 security = HTTPBearer(auto_error=True)
 
-
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncIOMotorDatabase = Depends(get_database),

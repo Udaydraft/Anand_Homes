@@ -123,10 +123,10 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
               <TouchableOpacity
                 style={styles.siteSelector}
-                onPress={() => navigation.navigate('Sites')}
+                onPress={() => navigation.navigate('ProjectMaster')}
               >
                 <Ionicons name="business-outline" size={14} color="#0D5C3A" />
-                <Text style={styles.siteSelectorText}>All Sites</Text>
+                <Text style={styles.siteSelectorText}>Projects</Text>
                 <Ionicons name="chevron-down" size={12} color="#64748B" />
               </TouchableOpacity>
             </View>
@@ -135,9 +135,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.kpiGrid}>
               <TouchableOpacity
                 style={styles.kpiCard}
-                onPress={() => navigation.navigate('Sites')}
+                onPress={() => navigation.navigate('ProjectMaster')}
               >
-                <Text style={styles.kpiLabel}>Total Sites</Text>
+                <Text style={styles.kpiLabel}>Total Projects</Text>
                 <View style={styles.kpiValueRow}>
                   <Text style={styles.kpiValue}>{sites.length}</Text>
                   <View style={[styles.kpiIconBox, { backgroundColor: '#ECFDF5' }]}>
@@ -193,7 +193,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.quickSummaryRow}>
               <TouchableOpacity
                 style={styles.summaryPill}
-                onPress={() => navigation.navigate('MaterialRequests')}
+                onPress={() => navigation.navigate('MaterialInward')}
               >
                 <View style={[styles.summaryDot, { backgroundColor: '#3B82F6' }]}>
                   <Ionicons name="document-text" size={12} color="#FFFFFF" />
@@ -201,12 +201,12 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.summaryValue}>
                   {pendingRequestsCount.toString().padStart(2, '0')}
                 </Text>
-                <Text style={styles.summaryLabel}>Pending Requests</Text>
+                <Text style={styles.summaryLabel}>Inward Entry</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.summaryPill}
-                onPress={() => navigation.navigate('Deliveries')}
+                onPress={() => navigation.navigate('MaterialOutward')}
               >
                 <View style={[styles.summaryDot, { backgroundColor: '#10B981' }]}>
                   <Ionicons name="car" size={12} color="#FFFFFF" />
@@ -214,20 +214,20 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.summaryValue}>
                   {activeDeliveriesCount.toString().padStart(2, '0')}
                 </Text>
-                <Text style={styles.summaryLabel}>Today's Deliveries</Text>
+                <Text style={styles.summaryLabel}>Outward Entry</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.summaryPill}
-                onPress={() => navigation.navigate('PhotoMonitoring')}
+                onPress={() => navigation.navigate('ProjectMaster')}
               >
-                <View style={[styles.summaryDot, { backgroundColor: '#8B5CF6' }]}>
-                  <Ionicons name="camera" size={12} color="#FFFFFF" />
+                <View style={[styles.summaryDot, { backgroundColor: '#2563EB' }]}>
+                  <Ionicons name="business" size={12} color="#FFFFFF" />
                 </View>
                 <Text style={styles.summaryValue}>
-                  {photos.length.toString().padStart(2, '0')}
+                  {sites.length.toString().padStart(2, '0')}
                 </Text>
-                <Text style={styles.summaryLabel}>Photos Uploaded</Text>
+                <Text style={styles.summaryLabel}>Projects</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -337,14 +337,14 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
                   <TouchableOpacity
                     style={styles.kpiCard}
-                    onPress={() => navigation.navigate('MaterialRequests')}
+                    onPress={() => navigation.navigate('MaterialInward')}
                   >
-                    <Text style={styles.kpiLabel}>Pending Requests</Text>
+                    <Text style={styles.kpiLabel}>Record Inward</Text>
                     <View style={styles.kpiValueRow}>
                       <Text style={styles.kpiValue}>
-                        {supervisorPendingRequests.toString().padStart(2, '0')}
+                        + In
                       </Text>
-                      <Ionicons name="document-text" size={16} color="#2563EB" />
+                      <Ionicons name="arrow-down-circle" size={16} color="#2563EB" />
                     </View>
                   </TouchableOpacity>
                 </View>
@@ -374,9 +374,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
               <TouchableOpacity
                 style={styles.viewAllBtn}
-                onPress={() => navigation.navigate('MaterialRequests')}
+                onPress={() => navigation.navigate('MoreMenu')}
               >
-                <Text style={styles.viewAllText}>View All Activity &gt;</Text>
+                <Text style={styles.viewAllText}>View All Options &gt;</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -391,9 +391,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
 
         {roleMode === 'admin' ? (
-          <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Sites')}>
+          <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('ProjectMaster')}>
             <Ionicons name="business-outline" size={20} color="#64748B" />
-            <Text style={styles.tabLabel}>Sites</Text>
+            <Text style={styles.tabLabel}>Projects</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('MySite')}>
@@ -407,9 +407,9 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.tabLabel}>Inventory</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('MaterialRequests')}>
-          <Ionicons name="document-text-outline" size={20} color="#64748B" />
-          <Text style={styles.tabLabel}>Requests</Text>
+        <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('MaterialInward')}>
+          <Ionicons name="arrow-down-circle-outline" size={20} color="#64748B" />
+          <Text style={styles.tabLabel}>Inward</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('MoreMenu')}>

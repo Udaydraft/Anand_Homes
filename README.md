@@ -104,41 +104,65 @@ AntiGravity/
 │   └── .env                        # Local development environment
 │
 ├── web/                            # React + Vite Web Application
+│   ├── public/                     # Static assets (logo.jpg, branded favicon.svg)
 │   ├── src/
-│   │   ├── components/             # Reusable UI components (Button, Input, Card, Modal, etc.)
+│   │   ├── components/             # Reusable UI components (Button, Input, Card, Modal, Charts)
+│   │   ├── context/                # DashboardContext & AuthContext
 │   │   ├── hooks/                  # Custom hooks (useAuth)
 │   │   ├── layouts/                # AuthLayout, DashboardLayout
-│   │   ├── pages/                  # LoginPage, RegisterPage, DashboardPage, ProfilePage
-│   │   ├── services/               # Centralized Axios client & services
+│   │   ├── pages/                  # Clean modular pages with index.ts barrel export
+│   │   │   ├── ProjectMasterPage.tsx
+│   │   │   ├── SupervisorMasterPage.tsx
+│   │   │   ├── ProjectDurationPage.tsx
+│   │   │   ├── InventoryMasterPage.tsx
+│   │   │   ├── InwardMaterialPage.tsx
+│   │   │   ├── OutwardMaterialPage.tsx
+│   │   │   ├── LabourEntryPage.tsx
+│   │   │   ├── LowStockAlertsPage.tsx
+│   │   │   ├── InventoryPage.tsx
+│   │   │   ├── ReportsPage.tsx
+│   │   │   ├── PrivacyPolicyPage.tsx
+│   │   │   ├── TermsConditionsPage.tsx
+│   │   │   └── index.ts            # Pages barrel exporter
+│   │   ├── services/               # Centralized Axios construction & auth services
 │   │   ├── types/                  # Web type extensions
 │   │   ├── utils/                  # Tailwind merge utilities (cn)
 │   │   ├── App.tsx                 # App router & providers
 │   │   ├── index.css               # Tailwind & theme styles
 │   │   └── main.tsx                # React DOM entry
 │   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   ├── .env.example
-│   └── .env
+│   └── vite.config.ts
 │
 ├── mobile/                         # React Native + Expo Application
 │   ├── src/
-│   │   ├── components/             # Reusable native components (Button, Input, Card, etc.)
+│   │   ├── components/             # Reusable native components (Button, Input, Card, Charts)
+│   │   ├── context/                # MobileDataContext & AuthContext
 │   │   ├── hooks/                  # useAuth hook
-│   │   ├── navigation/             # Native Stack navigation
-│   │   ├── screens/                # LoginScreen, RegisterScreen, DashboardScreen, ProfileScreen
+│   │   ├── navigation/             # Native Stack navigation (AppNavigator.tsx, types.ts)
+│   │   ├── screens/                # Mobile screens with index.ts barrel export
+│   │   │   ├── ProjectMasterScreen.tsx
+│   │   │   ├── SupervisorMasterScreen.tsx
+│   │   │   ├── ProjectDurationScreen.tsx
+│   │   │   ├── InventoryMasterScreen.tsx
+│   │   │   ├── MaterialInwardScreen.tsx
+│   │   │   ├── MaterialOutwardScreen.tsx
+│   │   │   ├── LabourEntryScreen.tsx
+│   │   │   ├── LowStockAlertScreen.tsx
+│   │   │   ├── InventoryScreen.tsx
+│   │   │   ├── ReportsScreen.tsx
+│   │   │   ├── PrivacyPolicyScreen.tsx
+│   │   │   ├── TermsConditionsScreen.tsx
+│   │   │   └── index.ts            # Screens barrel exporter
 │   │   ├── services/               # Centralized Axios client matching Web
 │   │   └── utils/                  # Secure token storage wrapper (expo-secure-store)
 │   ├── App.tsx                     # Mobile root entry point
 │   ├── app.json                    # Expo configuration
-│   ├── package.json
-│   ├── .env.example
-│   └── .env
+│   └── package.json
 │
 ├── packages/
 │   └── shared/                     # Shared TypeScript Library
 │       ├── constants/              # ROLES, API_ENDPOINTS
-│       ├── types/                  # User, Auth, ApiResponse interfaces
+│       ├── types/                  # User, Auth, Construction & Inventory interfaces
 │       ├── validation/             # Email, password, and input validators
 │       ├── index.ts                # Package barrel
 │       └── package.json
