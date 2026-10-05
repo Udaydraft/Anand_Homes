@@ -126,26 +126,7 @@ export const AdminDashboard: React.FC = () => {
 
   const isSystemEmpty = totalSitesCount === 0 && totalMaterialsCount === 0;
 
-  // Real weekly stock movement chart data based on actual logged inward and outward entries
-  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const chartDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const chartBarData = chartDays.map((day) => {
-    const stockIn = inwardEntries.filter((e) => {
-      if (!e.date) return false;
-      const d = new Date(e.date);
-      return !isNaN(d.getTime()) && dayLabels[d.getDay()] === day;
-    }).length;
-    const stockOut = outwardEntries.filter((e) => {
-      if (!e.date) return false;
-      const d = new Date(e.date);
-      return !isNaN(d.getTime()) && dayLabels[d.getDay()] === day;
-    }).length;
-    return {
-      day,
-      stockIn,
-      stockOut,
-    };
-  });
+
 
   const handleCreateSiteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -557,24 +538,10 @@ export const AdminDashboard: React.FC = () => {
 
           {/* Weekly Stock Movement Analytics */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Stock Movement Analytics</h3>
-                <p className="text-[11px] text-slate-500">Weekly inbound deliveries vs site disbursements</p>
-              </div>
-              <div className="flex items-center gap-3 text-[11px] font-semibold">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#0D5C3A]" />
-                  <span className="text-slate-600">Stock In</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#E5A91E]" />
-                  <span className="text-slate-600">Stock Out</span>
-                </div>
-              </div>
-            </div>
-
-            <StockBarChart data={chartBarData} />
+            <StockBarChart
+              inwardEntries={inwardEntries}
+              outwardEntries={outwardEntries}
+            />
           </div>
 
           {/* Outward Material Dispatches */}
