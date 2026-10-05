@@ -23,6 +23,7 @@ import {
   InventoryMasterPage,
   InwardMaterialPage,
   OutwardMaterialPage,
+  MaterialMovementPage,
   MaterialRequestsPage,
   LabourEntryPage,
   PrivacyPolicyPage,
@@ -81,10 +82,11 @@ export const App: React.FC = () => {
                 <Route path="/supervisors" element={<Navigate to="/projects?tab=supervisors" replace />} />
                 <Route path="/project-duration" element={<Navigate to="/projects?tab=durations" replace />} />
                 <Route path="/inventory-master" element={<Navigate to="/inventory" replace />} />
-                <Route path="/material-inward" element={<InwardMaterialPage />} />
-                <Route path="/material-outward" element={<OutwardMaterialPage />} />
+                <Route path="/material-movement" element={<MaterialMovementPage />} />
+                <Route path="/material-inward" element={<MaterialMovementPage />} />
+                <Route path="/material-outward" element={<MaterialMovementPage />} />
                 <Route path="/material-requests" element={<MaterialRequestsPage />} />
-                <Route path="/labour-entry" element={<LabourEntryPage />} />
+                <Route path="/labour-entry" element={<Navigate to="/projects?tab=labour" replace />} />
                 <Route path="/sites" element={<Navigate to="/projects" replace />} />
                 <Route path="/my-site" element={<MySitePage />} />
                 <Route path="/inventory" element={<InventoryPage />} />

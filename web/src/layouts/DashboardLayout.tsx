@@ -10,6 +10,7 @@ import {
   Package,
   ArrowDownToLine,
   ArrowUpFromLine,
+  ArrowLeftRight,
   FileSpreadsheet,
   Truck,
   Camera,
@@ -82,25 +83,21 @@ export const DashboardLayout: React.FC = () => {
   const adminNavItems: NavItem[] = [
     { label: 'Admin Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { label: 'Project & Site Master', path: '/projects', icon: Building2 },
-    { label: 'Material Inward', path: '/material-inward', icon: ArrowDownToLine },
-    { label: 'Material Outward', path: '/material-outward', icon: ArrowUpFromLine },
+    { label: 'Material Inward & Outward', path: '/material-inward', icon: ArrowLeftRight },
     { label: 'Material Requests', path: '/material-requests', icon: FileSpreadsheet },
-    { label: 'Labour Entry', path: '/labour-entry', icon: HardHat },
     { label: 'Stock Balance Tracking', path: '/inventory', icon: Package },
     { label: 'Low Stock Alerts', path: '/low-stock', icon: AlertTriangle },
     { label: 'Reports & Audit', path: '/reports', icon: BarChart3 },
-    { label: 'Profile Settings', path: '/profile', icon: Settings },
   ];
 
   const supervisorNavItems: NavItem[] = [
     { label: 'Supervisor Dashboard', path: '/supervisor/dashboard', icon: LayoutDashboard },
     { label: 'My Project Site', path: '/my-site', icon: Building2 },
-    { label: 'Material Inward', path: '/material-inward', icon: ArrowDownToLine },
+    { label: 'Material Inward & Outward', path: '/material-inward', icon: ArrowLeftRight },
     { label: 'Request Materials', path: '/material-requests', icon: FileSpreadsheet },
-    { label: 'Labour Entry', path: '/labour-entry', icon: HardHat },
+    { label: 'Labour Entry', path: '/projects?tab=labour', icon: HardHat },
     { label: 'Inventory Balance', path: '/inventory', icon: Package },
     { label: 'Low Stock Warnings', path: '/low-stock', icon: AlertTriangle },
-    { label: 'My Profile', path: '/profile', icon: Settings },
   ];
 
   const navItems = isAdmin ? adminNavItems : supervisorNavItems;
@@ -110,12 +107,11 @@ export const DashboardLayout: React.FC = () => {
     if (p === '/admin/dashboard') return 'Super Admin Dashboard';
     if (p === '/supervisor/dashboard') return 'Site Supervisor Dashboard';
     if (p === '/dashboard' || p === '/') return isAdmin ? 'Super Admin Dashboard' : 'Site Supervisor Dashboard';
-    if (p.includes('/projects') || p.includes('/supervisors') || p.includes('/project-duration')) return 'Project & Site Setup';
+    if (p.includes('/projects') || p.includes('/supervisors') || p.includes('/project-duration')) return 'Project & Site Master';
     if (p.includes('/my-site')) return 'My Project Site';
-    if (p.includes('/material-inward')) return 'Inward Material Entry';
-    if (p.includes('/material-outward')) return 'Outward Material Entry';
+    if (p.includes('/material-inward') || p.includes('/material-outward') || p.includes('/material-movement')) return 'Material Inward & Outward Movement';
     if (p.includes('/material-requests')) return 'Site-Wise Material Requests';
-    if (p.includes('/labour-entry')) return 'Labour Entry';
+    if (p.includes('/labour-entry')) return 'Labour Entry & Attendance';
     if (p.includes('/sites')) return 'Sites & Locations';
     if (p.includes('/inventory') || p.includes('/inventory-master')) return 'Stock Balance Tracking';
     if (p.includes('/reports')) return 'Reports & Audit Trail';

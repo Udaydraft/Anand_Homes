@@ -19,9 +19,9 @@ import {
   Layers,
 } from 'lucide-react';
 import { constructionService } from '../services/construction.service';
-import { ProjectMaster, SupervisorMaster, ProjectDuration } from '@project/shared';
+import { ProjectMaster, SupervisorMaster, ProjectDuration, LabourEntry } from '@project/shared';
 
-type TabType = 'all-in-one' | 'projects' | 'supervisors' | 'durations';
+type TabType = 'all-in-one' | 'projects' | 'supervisors' | 'durations' | 'labour';
 
 export const ProjectMasterPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -85,18 +85,31 @@ export const ProjectMasterPage: React.FC = () => {
   const [dFromDate, setDFromDate] = useState('');
   const [dToDate, setDToDate] = useState('');
 
-  // Fetch all 3 datasets in parallel
+  // -------------------------------------------------------------------------
+  // Form State: 5. Labour Entry Tab
+  // -------------------------------------------------------------------------
+  const [labourEntries, setLabourEntries] = useState<LabourEntry[]>([]);
+  const [lDate, setLDate] = useState(new Date().toISOString().split('T')[0]);
+  const [lProject, setLProject] = useState('');
+  const [lSite, setLSite] = useState('');
+  const [lNatureOfWork, setLNatureOfWork] = useState('Construction');
+  const [lType, setLType] = useState<'Count (Labour)' | 'Other'>('Count (Labour)');
+  const [lWorkerCount, setLWorkerCount] = useState('');
+
+  // Fetch all datasets in parallel
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      const [projData, supData, durData] = await Promise.all([
+      const [projData, supData, durData, labData] = await Promise.all([
         constructionService.getProjectsMaster(),
         constructionService.getSupervisorsMaster(),
         constructionService.getProjectDurations(),
+        constructionService.getLabourEntries(),
       ]);
       setProjects(projData || []);
       setSupervisors(supData || []);
       setDurations(durData || []);
+      setLabourEntries(labData || []);
 
       if (projData && projData.length > 0) {
         if (!sProject) {
@@ -106,6 +119,10 @@ export const ProjectMasterPage: React.FC = () => {
         if (!dProjectName) {
           setDProjectName(projData[0].projectName);
           setDSiteName(projData[0].siteName);
+        }
+        if (!lProject) {
+          setLProject(projData[0].projectName);
+          setLSite(projData[0].siteName);
         }
       }
     } catch (err: any) {
@@ -122,7 +139,7 @@ export const ProjectMasterPage: React.FC = () => {
   // Update tab if URL param changes externally
   useEffect(() => {
     const tabParam = searchParams.get('tab') as TabType;
-    if (tabParam && ['all-in-one', 'projects', 'supervisors', 'durations'].includes(tabParam)) {
+    if (tabParam && ['all-in-one', 'projects', 'supervisors', 'durations', 'labour'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -387,8 +404,8 @@ export const ProjectMasterPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 3 Quick Counters */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* 4 Quick Counters */}
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
           <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-100 text-center">
             <span className="text-xs text-slate-500 block font-medium">Projects</span>
             <span className="text-base font-extrabold text-slate-800">{projects.length}</span>
@@ -400,6 +417,10 @@ export const ProjectMasterPage: React.FC = () => {
           <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-100 text-center">
             <span className="text-xs text-slate-500 block font-medium">Durations</span>
             <span className="text-base font-extrabold text-blue-600">{durations.length}</span>
+          </div>
+          <div className="px-3.5 py-2 rounded-xl bg-amber-50/60 border border-amber-100 text-center">
+            <span className="text-xs text-amber-800 block font-medium">Labour Logs</span>
+            <span className="text-base font-extrabold text-amber-900">{labourEntries.length}</span>
           </div>
         </div>
       </div>
@@ -452,6 +473,18 @@ export const ProjectMasterPage: React.FC = () => {
         >
           <Calendar className="w-3.5 h-3.5" />
           <span>3. Project Duration ({durations.length})</span>
+        </button>
+
+        <button
+          onClick={() => handleTabChange('labour')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            activeTab === 'labour'
+              ? 'bg-[#0A3925] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+          }`}
+        >
+          <HardHat className="w-3.5 h-3.5 text-amber-400" />
+          <span>4. Labour Entry ({labourEntries.length})</span>
         </button>
       </div>
 
@@ -1153,6 +1186,257 @@ export const ProjectMasterPage: React.FC = () => {
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() => handleDeleteDuration(dur.id)}
+                            className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: LABOUR ENTRY & ATTENDANCE */}
+      {/* ========================================================================= */}
+      {activeTab === 'labour' && (
+        <div className="space-y-6">
+          {/* Labour Entry Form */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <HardHat className="w-4 h-4 text-amber-600" />
+                <h2 className="text-sm font-bold text-slate-900">Record Daily Labour Headcount</h2>
+              </div>
+              <span className="text-xs text-slate-400">Step 4: Workforce Tracking</span>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const countNum = parseInt(lWorkerCount, 10);
+                if (!lProject.trim() || !lSite.trim() || isNaN(countNum) || countNum <= 0) {
+                  setFeedback({ type: 'error', message: 'Please select project/site and enter valid workers count.' });
+                  return;
+                }
+                try {
+                  setSubmitting(true);
+                  await constructionService.createLabourEntry({
+                    date: lDate,
+                    project: lProject,
+                    site: lSite,
+                    natureOfWork: lNatureOfWork,
+                    type: lType,
+                    workerCount: countNum,
+                  });
+                  setFeedback({ type: 'success', message: 'Labour deployment entry recorded successfully.' });
+                  setLWorkerCount('');
+                  await fetchAllData();
+                } catch (err: any) {
+                  setFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to record labour entry.' });
+                } finally {
+                  setSubmitting(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={lDate}
+                    onChange={(e) => setLDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0A3925]/20 focus:border-[#0A3925]"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    Project <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={lProject}
+                    onChange={(e) => {
+                      setLProject(e.target.value);
+                      const matched = projects.find((p) => p.projectName === e.target.value);
+                      if (matched) setLSite(matched.siteName);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0A3925]/20 focus:border-[#0A3925]"
+                    required
+                  >
+                    <option value="">Select project</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.projectName}>
+                        {p.projectName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    Site <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Site name"
+                    value={lSite}
+                    onChange={(e) => setLSite(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0A3925]/20 focus:border-[#0A3925]"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    Nature of Work <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={lNatureOfWork}
+                    onChange={(e) => setLNatureOfWork(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0A3925]/20 focus:border-[#0A3925]"
+                    required
+                  >
+                    <option value="Construction">Construction</option>
+                    <option value="Foundation Work">Foundation Work</option>
+                    <option value="Brickwork & Masonry">Brickwork & Masonry</option>
+                    <option value="Plastering & Finishing">Plastering & Finishing</option>
+                    <option value="RCC / Slab Concrete Casting">RCC / Slab Concrete Casting</option>
+                    <option value="Electrical Installation">Electrical Installation</option>
+                    <option value="Plumbing & Drainage">Plumbing & Drainage</option>
+                    <option value="Maintenance & Repairs">Maintenance & Repairs</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    Deployment Type <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-4 pt-2">
+                    <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                      <input
+                        type="radio"
+                        name="labourType"
+                        checked={lType === 'Count (Labour)'}
+                        onChange={() => setLType('Count (Labour)')}
+                        className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span>Count (Labour)</span>
+                    </label>
+                    <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                      <input
+                        type="radio"
+                        name="labourType"
+                        checked={lType === 'Other'}
+                        onChange={() => setLType('Other')}
+                        className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span>Other</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                    Workers Headcount <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 12"
+                    value={lWorkerCount}
+                    onChange={(e) => setLWorkerCount(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0A3925]/20 focus:border-[#0A3925]"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="bg-[#0A3925] hover:bg-[#082d1d] text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 disabled:opacity-50"
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Record Labour Deployment'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Labour Entries Directory Table */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Labour Deployment Log</h3>
+                <p className="text-xs text-slate-400">Daily attendance and workforce allocation across sites</p>
+              </div>
+              <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                {labourEntries.length} Total Logs
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 uppercase tracking-wider text-[11px]">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Project & Site</th>
+                    <th className="px-4 py-3">Nature of Work</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3 text-right">Workers Count</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {labourEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-400">
+                        No labour deployment records found.
+                      </td>
+                    </tr>
+                  ) : (
+                    labourEntries.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3 font-medium text-slate-800">{entry.date}</td>
+                        <td className="px-4 py-3">
+                          <strong className="text-slate-900 block font-bold">{entry.project}</strong>
+                          <span className="text-[10px] text-slate-500">{entry.site}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-semibold">
+                            {entry.natureOfWork}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">{entry.type}</td>
+                        <td className="px-4 py-3 text-right font-extrabold text-amber-900">
+                          {entry.workerCount} workers
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={async () => {
+                              if (entry.id) {
+                                try {
+                                  await constructionService.deleteLabourEntry(entry.id);
+                                  await fetchAllData();
+                                } catch (err) {
+                                  console.error('Failed to delete labour entry:', err);
+                                }
+                              }
+                            }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                             title="Delete"
                           >

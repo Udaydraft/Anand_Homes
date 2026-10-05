@@ -14,6 +14,7 @@ export { ProjectDurationPage } from './ProjectDurationPage';
 export { InventoryMasterPage } from './InventoryMasterPage';
 export { InwardMaterialPage } from './InwardMaterialPage';
 export { OutwardMaterialPage } from './OutwardMaterialPage';
+export { MaterialMovementPage } from './MaterialMovementPage';
 export { LabourEntryPage } from './LabourEntryPage';
 
 // Supporting Operational Pages
